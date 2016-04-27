@@ -8,27 +8,35 @@ import (
 
 func TestRelationLoad(t *testing.T) {
 	r := Relation{Name: "testRel1", Columns: []Column{
-		{Signature: AttrInfo{Name: "col1", Type: INT, Enc: NOCOMP}, Data: make([]interface{}, 0)},
+		{Signature: AttrInfo{Name: "col1", Type: INT, Enc: NOCOMP}, Data: make([]int, 0)},
+		{Signature: AttrInfo{Name: "col2", Type: STRING, Enc: NOCOMP}, Data: make([]string, 0)},
 	}}
 
 	// create temp file
-	file, _ := os.Open("temp.csv")
-	file.WriteString("1\n2\n3\n4\n5")
+	file, err := os.Create("temp.csv")
+
+	if err != nil {
+		t.Error(err)
+		t.Skip()
+	}
+	file.WriteString("1,a\n2,b\n3,c\n4,d\n5,e")
 	file.Close()
 
 	defer os.Remove("temp.csv")
 
 	r.Load("temp.csv", ',')
 
-	cols, _ := r.GetRawData()
+	//cols, _ := r.GetRawData()
+	cols := r.Columns
 
-	if len(cols) != 1 {
+	if len(cols) != 2 {
 		t.Errorf("expected 1 column, found %d", len(cols))
 		t.Fail()
 	} else {
-		if !reflect.DeepEqual([]int{1, 2, 3, 4, 5}, cols[0]) {
+		if !reflect.DeepEqual([]int{1, 2, 3, 4, 5}, cols[0].Data) || !reflect.DeepEqual([]string{"a", "b", "c", "d", "e"}, cols[1].Data) {
 			t.Error("test file content does not match up with relation content")
 			t.Log(cols[0])
+			t.Log(cols[1])
 			t.Fail()
 		}
 	}
@@ -131,7 +139,7 @@ func TestRelationGetRawData(t *testing.T) {
 				Name: "testRel3",
 				Columns: []Column{
 					{Signature: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, Data: []int{1, 2, 3}},
-					{Signature: AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, Data: []string{"testVal1", "testVal2", "testVal3"}},
+					{Signature: AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, Data: []string{"testValue1", "testVal2", "testValutas3"}},
 					{Signature: AttrInfo{Name: "testCol3", Type: FLOAT, Enc: NOCOMP}, Data: []float64{1.0, 2.0, 3.0}},
 				},
 			},
@@ -142,7 +150,7 @@ func TestRelationGetRawData(t *testing.T) {
 			},
 			cols: []interface{}{
 				[]int{1, 2, 3},
-				[]string{"testVal1", "testVal2", "testVal3"},
+				[]string{"testValue1", "testVal2", "testValutas3"},
 				[]float64{1.0, 2.0, 3.0},
 			},
 		},
