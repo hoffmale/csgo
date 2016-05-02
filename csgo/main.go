@@ -2,11 +2,32 @@ package main
 
 import (
 	"fmt"
-
 	. "github.com/hoffmale/csgo"
 )
 
+func test_case() {
+	var cs ColumnStore
+
+	c.CreateRelation("Sudent", []AttrInfo{
+		{Name: "id", Type: INT, Enc: NOCOMP},
+		{Name: "name", Type: STRING, Enc: NOCOMP}
+	})
+	fmt.Println("Relation 'Student' has been created!")
+
+	c.CreateRelation("Result", []AttrInfo{
+		{Name: "id", Type: INT, Enc: NOCOMP},
+		{Name: "student_id", Type: INT, Enc: NOCOMP},
+		{Name: "result", Type: FLOAT, Enc: NOCOMP}
+	})
+	fmt.Println("Relation 'Result' has been created!")
+
+	for k, r in c.Relations {
+		r.Print()
+	}
+}
+
 func main() {
+	/*
 	fmt.Println("This might become a useful console utility for our ColumnStore database")
 	fmt.Println()
 	// Transaction_date,Product,Price,Payment_Type,Name,City,State,Country,Account_Created,Last_Login,Latitude,Longitude
@@ -38,4 +59,5 @@ func main() {
 	})
 
 	r.Print()
+	*/
 }
