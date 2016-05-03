@@ -12,8 +12,7 @@ func (r Relation) Load(csvFile string, separator rune) {
 	file, err := CreateFileReader(csvFile)
 
 	if err != nil {
-		fmt.Print("error [Relation.Load:15]: ")
-		fmt.Println(err)
+		fmt.Printf("error creating FileReader: %#v\n", err)
 		return
 	}
 
@@ -23,7 +22,7 @@ func (r Relation) Load(csvFile string, separator rune) {
 		line, err := file.ReadLine()
 
 		if err != nil {
-			fmt.Print("error [Relation.Load:27]: ")
+			fmt.Print("error reading file: ")
 			fmt.Print(err)
 			return
 		}
@@ -31,7 +30,7 @@ func (r Relation) Load(csvFile string, separator rune) {
 		fields := strings.Split(line, string(separator))
 
 		if len(fields) != len(r.Columns) {
-			fmt.Print("error [Relation.Load:35]: ")
+			fmt.Print("error during parsing: ")
 			fmt.Printf("Found row with %d fields, relation contains %d fields instead", len(fields), len(r.Columns))
 			fmt.Println("")
 			return
@@ -138,79 +137,6 @@ func (r Relation) Select(col AttrInfo, comp Comparison, compVal interface{}) Rel
 			copyRow(rowIndex)
 		}
 	}
-
-	/*switch filterColumn.Signature.Type {
-	case INT:
-		compValue := compVal.(int)
-		for rowIndex, rowValue := range filterColumn.Data.([]int) {
-			valid := false
-			switch comp {
-			case EQ:
-				valid = rowValue == compValue
-			case NEQ:
-				valid = rowValue != compValue
-			case LT:
-				valid = rowValue < compValue
-			case LEQ:
-				valid = rowValue <= compValue
-			case GT:
-				valid = rowValue > compValue
-			case GEQ:
-				valid = rowValue >= compValue
-			}
-
-			if valid {
-				copyRow(rowIndex)
-			}
-		}
-	case FLOAT:
-		compValue := compVal.(float64)
-		for rowIndex, rowValue := range filterColumn.Data.([]float64) {
-			valid := false
-			switch comp {
-			case EQ:
-				valid = rowValue == compValue
-			case NEQ:
-				valid = rowValue != compValue
-			case LT:
-				valid = rowValue < compValue
-			case LEQ:
-				valid = rowValue <= compValue
-			case GT:
-				valid = rowValue > compValue
-			case GEQ:
-				valid = rowValue >= compValue
-			}
-
-			if valid {
-				copyRow(rowIndex)
-			}
-		}
-	case STRING:
-		compValue := compVal.(string)
-		for rowIndex, rowValue := range filterColumn.Data.([]string) {
-			valid := false
-			switch comp {
-			case EQ:
-				valid = rowValue == compValue
-			case NEQ:
-				valid = rowValue != compValue
-				/*case LT:
-					valid = rowValue < compValue
-				case LEQ:
-					valid = rowValue <= compValue
-				case GT:
-					valid = rowValue > compValue
-				case GEQ:
-					valid = rowValue >= compValue*/ /*
-			}
-
-			if valid {
-				copyRow(rowIndex)
-			}
-		}
-	}*/
-
 	return result
 }
 
