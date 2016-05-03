@@ -197,7 +197,7 @@ func (r Relation) Print() {
 	}
 
 	isAdjustmentNeeded := func(width int) bool {
-		return len(r.Name)-4 >= width
+		return len(r.Name)+4 >= width
 	}
 
 	adjustWidth := func(preview []previewColumn, baseWidth int) int {
@@ -215,12 +215,12 @@ func (r Relation) Print() {
 	}
 
 	centerText := func(text string, maxWidth int) string {
-		indentFront := (maxWidth - len(text) + 1) / 2
-		if indentFront <= 0 {
+		indentBack := (maxWidth - len(text) + 1) / 2
+		indentFront := maxWidth - len(text) - indentBack
+		if indentBack <= 0 {
 			return text
 		}
 
-		indentBack := maxWidth - len(text) - indentFront
 		return strings.Repeat(" ", indentFront) + text + strings.Repeat(" ", indentBack)
 	}
 
@@ -291,7 +291,6 @@ func (r Relation) Print() {
 	}
 
 	totalWidth := calcTotalWidth(data)
-	fmt.Printf("%d\n", totalWidth)
 	if isAdjustmentNeeded(totalWidth) {
 		totalWidth = adjustWidth(data, totalWidth)
 	}
