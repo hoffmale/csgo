@@ -12,8 +12,7 @@ func (r Relation) Load(csvFile string, separator rune) {
 	file, err := CreateFileReader(csvFile)
 
 	if err != nil {
-		fmt.Printf("error creating FileReader: %#v\n", err)
-		return
+		panic(fmt.Sprintf("error creating FileReader: %#v\n", err))
 	}
 
 	defer file.Close()
@@ -30,10 +29,7 @@ func (r Relation) Load(csvFile string, separator rune) {
 		fields := strings.Split(line, string(separator))
 
 		if len(fields) != len(r.Columns) {
-			fmt.Print("error during parsing: ")
-			fmt.Printf("Found row with %d fields, relation contains %d fields instead", len(fields), len(r.Columns))
-			fmt.Println("")
-			return
+			panic(fmt.Sprintf("error during parsing: Found row with %d fields, relation contains %d fields instead (the file might be corrupted!)", len(fields), len(r.Columns)))
 		}
 
 		for index, fieldValue := range fields {
@@ -86,7 +82,7 @@ var compFuncs = map[DataTypes]map[Comparison]CompFunc{
 	},
 	STRING: map[Comparison]CompFunc{
 		EQ:  func(value1 interface{}, value2 interface{}) bool { return value1.(string) == value2.(string) },
-		NEQ: func(value1 interface{}, value2 interface{}) bool { return value1.(string) != value2.(string) },
+		NEQ: func(value1 interface{}, value2 interface{}) bool { return !(value1.(string) == value2.(string)) },
 	},
 }
 

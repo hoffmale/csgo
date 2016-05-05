@@ -2,6 +2,7 @@ package csgo
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 )
 
@@ -49,10 +50,18 @@ func (col *Column) ImportRow(field string) (int, error) {
 
 // AddRow adds a row with the specified value.
 // Currently, the value gets appended at the end of the Data slice. This might change in the future.
-func (col *Column) AddRow(typ DataTypes, value interface{}) (int, error) {
+func (col *Column) AddRow(typ DataTypes, value interface{}) (index int, err error) {
 	if typ != col.Signature.Type {
 		return -1, errors.New("type mismatch")
 	}
+
+	// catch conversion panics (typ does not match value)
+	defer func() {
+		if r := recover(); r != nil {
+			index = -1
+			err = fmt.Errorf("%#v", r)
+		}
+	}()
 
 	switch typ {
 	case INT:

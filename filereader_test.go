@@ -77,7 +77,7 @@ func checkLine(t *testing.T, file *FileReader, content string) bool {
 	return success
 }
 
-func TestOpenCSVFile_NotExisting(t *testing.T) {
+func TestCreateFileReader_NotExisting(t *testing.T) {
 	os.Remove(TESTFILE)
 	// file not existing
 	file, errMsg := CreateFileReader(TESTFILE)
@@ -87,7 +87,7 @@ func TestOpenCSVFile_NotExisting(t *testing.T) {
 	}
 }
 
-func TestOpenCSVFile_Empty1(t *testing.T) {
+func TestCreateFileReader_Empty1(t *testing.T) {
 	// file exists, but empty
 	var file *FileReader
 
@@ -98,7 +98,7 @@ func TestOpenCSVFile_Empty1(t *testing.T) {
 	}
 }
 
-func TestOpenCSVFile_Empty2(t *testing.T) {
+func TestCreateFileReader_Empty2(t *testing.T) {
 	// file exists, but empty
 	var file *FileReader
 
@@ -120,7 +120,7 @@ func TestOpenCSVFile_Empty3(t *testing.T) {
 	}
 }
 
-func TestOpenCSVFile_Empty4(t *testing.T) {
+func TestCreateFileReader_Empty4(t *testing.T) {
 	// file exists, but empty
 	var file *FileReader
 
@@ -131,7 +131,7 @@ func TestOpenCSVFile_Empty4(t *testing.T) {
 	}
 }
 
-func TestOpenCSVFile_NotEmpty(t *testing.T) {
+func TestCreateFileReader_NotEmpty(t *testing.T) {
 	// file exists, with data!
 	var file *FileReader
 
@@ -143,7 +143,7 @@ func TestOpenCSVFile_NotEmpty(t *testing.T) {
 	}
 }
 
-func TestCSVFileReadLine(t *testing.T) {
+func TestFileReaderReadLine(t *testing.T) {
 	cases := []struct {
 		fileContent string
 		lines       []string

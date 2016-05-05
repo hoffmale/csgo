@@ -16,6 +16,13 @@ func TestColumnStoreCreateRelation(t *testing.T) {
 		t.Error("No relation got created (creation was expected)")
 		t.Fail()
 	}
+
+	c = ColumnStore{Relations: nil}
+	r = c.CreateRelation("testRel3", []AttrInfo{{Name: "testCol2", Type: FLOAT, Enc: NOCOMP}})
+	if r == nil {
+		t.Error("ColumnStore didnt auto-create Relations map")
+		t.Fail()
+	}
 }
 
 func TestColumnStoreGetRelation(t *testing.T) {
@@ -32,6 +39,19 @@ func TestColumnStoreGetRelation(t *testing.T) {
 	r = c.GetRelation("testRel2")
 	if r == nil {
 		t.Error("Got no relation although corresponding relation was just created")
+		t.Fail()
+	}
+
+	c = ColumnStore{Relations: nil}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("error in column store with Relations=nil: %#v", r)
+			t.Fail()
+		}
+	}()
+	r = c.GetRelation("testRel3")
+	if r != nil {
+		t.Error("Got a relation from uninitialised column store")
 		t.Fail()
 	}
 }

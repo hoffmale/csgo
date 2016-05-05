@@ -1,7 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"log"
+	"os"
+	"runtime/pprof"
 
 	. "github.com/hoffmale/csgo"
 )
@@ -24,7 +28,7 @@ func test_case() {
 		{Name: "Longitude", Type: FLOAT, Enc: NOCOMP},
 	})
 
-	//c.GetRelation("SalesJan2009").Load("SalesJan2009.csv", ',')
+	c.GetRelation("SalesJan2009").Load("SalesJan2009.csv", ',')
 	fmt.Println("DEBUG: HIER 2")
 	r := c.GetRelation("SalesJan2009").Select(AttrInfo{Name: "Country", Type: STRING, Enc: NOCOMP}, NEQ, "United States").Scan([]AttrInfo{
 		{Name: "Name", Type: STRING, Enc: NOCOMP},
@@ -49,9 +53,12 @@ func test_case() {
 	}
 }
 
+// to enable cpu profiling
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
 
-	test_case()
+	//test_case()
 
 	/*
 		fmt.Println("This might become a useful console utility for our ColumnStore database")
@@ -86,4 +93,63 @@ func main() {
 
 		r.Print()
 	*/
+
+	// enable CPU profiling [BEGIN]
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+	// enable CPU profiling [END]
+
+	cs := ColumnStore{}
+	tblPartSupp := cs.CreateRelation("PARTSUPP", []AttrInfo{
+		{Name: "PARTKEY", Type: INT, Enc: NOCOMP},
+		{Name: "SUPPKEY", Type: INT, Enc: NOCOMP},
+		{Name: "AVAILQTY", Type: INT, Enc: NOCOMP},
+		{Name: "SUPPLYCOST", Type: FLOAT, Enc: NOCOMP},
+		{Name: "COMMENT", Type: STRING, Enc: NOCOMP},
+	})
+	tblSupplier := cs.CreateRelation("SUPPLIER", []AttrInfo{
+		{"SUPPKEY", INT, NOCOMP},
+		{"NAME", STRING, NOCOMP},
+		{"ADDRESS", STRING, NOCOMP},
+		{"NATIONKEY", INT, NOCOMP},
+		{"PHONE", STRING, NOCOMP},
+		{"ACCTBAL", FLOAT, NOCOMP},
+		{"COMMENT", STRING, NOCOMP},
+	})
+	tblPart := cs.CreateRelation("PART", []AttrInfo{
+		{"PARTKEY", INT, NOCOMP},
+		{"NAME", STRING, NOCOMP},
+		{"MFGR", STRING, NOCOMP},
+		{"BRAND", STRING, NOCOMP},
+		{"TYPE", STRING, NOCOMP},
+		{"SIZE", INT, NOCOMP},
+		{"CONTAINER", STRING, NOCOMP},
+		{"RETAILPRICE", FLOAT, NOCOMP},
+		{"COMMENT", STRING, NOCOMP},
+	})
+
+	tblPartSupp.Load("partsupp.tbl", '|')
+	tblSupplier.Load("supplier.tbl", '|')
+	tblPart.Load("part.tbl", '|')
+
+	negativeSuppliers := tblSupplier.Scan([]AttrInfo{{"SUPPKEY", INT, NOCOMP}, {"ACCTBAL", FLOAT, NOCOMP}}).Select(AttrInfo{"ACCTBAL", FLOAT, NOCOMP}, LT, float64(0.0))
+	//negativeSuppliers.Print()
+
+	for i := 0; i < 10; i++ {
+		suppKey, _ := (negativeSuppliers.(Relation)).Columns[0].GetRow(i)
+
+		suppliedParts := tblPartSupp.Scan([]AttrInfo{{"PARTKEY", INT, NOCOMP}, {"SUPPKEY", INT, NOCOMP}}).Select(AttrInfo{"SUPPKEY", INT, NOCOMP}, EQ, suppKey).(Relation)
+		for j := 0; j < suppliedParts.Columns[0].GetNumRows(); j++ {
+			partKey, _ := suppliedParts.Columns[0].GetRow(j)
+			tblPart.Select(AttrInfo{"PARTKEY", INT, NOCOMP}, EQ, partKey) //.Print()
+		}
+	}
+	//tblPartSupp.Select(AttrInfo{"SUPPLYCOST", FLOAT, NOCOMP}, LT, float64(100.0)).Print()
 }

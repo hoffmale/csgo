@@ -1,7 +1,6 @@
 package csgo
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 )
@@ -40,13 +39,15 @@ func TestColumnAddRow(t *testing.T) {
 		{sig: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, data: []int{}, value: int(0), valueType: INT, shouldFail: false, expectedIndex: 0, expectedData: []int{0}},
 		{sig: AttrInfo{Name: "testCol2", Type: FLOAT, Enc: NOCOMP}, data: []float64{}, value: float64(4.5), valueType: FLOAT, shouldFail: false, expectedIndex: 0, expectedData: []float64{4.5}},
 		{sig: AttrInfo{Name: "testCol3", Type: STRING, Enc: NOCOMP}, data: []string{}, value: "testVal", valueType: STRING, shouldFail: false, expectedIndex: 0, expectedData: []string{"testVal"}},
-		// type mismatch
+		// type mismatch (column signature)
 		{sig: AttrInfo{Name: "testCol4", Type: INT, Enc: NOCOMP}, data: []int{}, value: float64(4.5), valueType: FLOAT, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
 		{sig: AttrInfo{Name: "testCol5", Type: INT, Enc: NOCOMP}, data: []int{}, value: "testVal", valueType: STRING, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
 		{sig: AttrInfo{Name: "testCol6", Type: FLOAT, Enc: NOCOMP}, data: []float64{}, value: int(3), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []float64{}},
 		{sig: AttrInfo{Name: "testCol7", Type: FLOAT, Enc: NOCOMP}, data: []float64{}, value: "testVal", valueType: STRING, shouldFail: true, expectedIndex: -1, expectedData: []float64{}},
 		{sig: AttrInfo{Name: "testCol8", Type: STRING, Enc: NOCOMP}, data: []string{}, value: int(5), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []string{}},
 		{sig: AttrInfo{Name: "testCol9", Type: STRING, Enc: NOCOMP}, data: []string{}, value: float64(4.5), valueType: FLOAT, shouldFail: true, expectedIndex: -1, expectedData: []string{}},
+		// type mismatch (parameters)
+		{sig: AttrInfo{Name: "testCol11", Type: INT, Enc: NOCOMP}, data: []int{}, value: float64(3), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
 		// check index
 		{sig: AttrInfo{Name: "testCol10", Type: INT, Enc: NOCOMP}, data: []int{1, 2, 3, 4, 5, 6}, value: int(7), valueType: INT, shouldFail: false, expectedIndex: 6, expectedData: []int{1, 2, 3, 4, 5, 6, 7}},
 	}
@@ -56,7 +57,7 @@ func TestColumnAddRow(t *testing.T) {
 		col.Data = testcase.data
 
 		index, err := col.AddRow(testcase.valueType, testcase.value)
-		fmt.Println(col)
+
 		if !reflect.DeepEqual(col.Data, testcase.expectedData) {
 			t.Fail()
 			t.Errorf("testcase %d: data mismatch (got %v, expected %v)", testcaseID, col.Data, testcase.expectedData)
@@ -90,15 +91,24 @@ func TestColumnImportRow(t *testing.T) {
 		shouldFail    bool
 		expectedValue interface{}
 	}{
+		// INT - accept only integers
 		{sig: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, field: "321", shouldFail: false, expectedValue: int(321)},
+		{sig: AttrInfo{Name: "testCol2", Type: INT, Enc: NOCOMP}, field: "string", shouldFail: true},
+		{sig: AttrInfo{Name: "testCol3", Type: INT, Enc: NOCOMP}, field: "3.14", shouldFail: true},
+		// FLOAT - accept any number
+		{sig: AttrInfo{Name: "testCol4", Type: FLOAT, Enc: NOCOMP}, field: "321", shouldFail: false, expectedValue: float64(321)},
+		{sig: AttrInfo{Name: "testCol5", Type: FLOAT, Enc: NOCOMP}, field: "string", shouldFail: true},
+		{sig: AttrInfo{Name: "testCol6", Type: FLOAT, Enc: NOCOMP}, field: "3.14", shouldFail: false, expectedValue: float64(3.14)},
+		// STRING - accept any string
+		{sig: AttrInfo{Name: "testCol7", Type: STRING, Enc: NOCOMP}, field: "321", shouldFail: false, expectedValue: "321"},
+		{sig: AttrInfo{Name: "testCol8", Type: STRING, Enc: NOCOMP}, field: "string", shouldFail: false, expectedValue: "string"},
+		{sig: AttrInfo{Name: "testCol9", Type: STRING, Enc: NOCOMP}, field: "3.14", shouldFail: false, expectedValue: "3.14"},
 	}
 
 	for testcaseID, testcase := range cases {
 		col := NewColumn(testcase.sig)
 
 		index, err := col.ImportRow(testcase.field)
-		fmt.Printf("testcase %d: index = %d\n", testcaseID, index)
-		fmt.Println(col)
 		if testcase.shouldFail {
 			if err != nil {
 				continue
@@ -123,6 +133,33 @@ func TestColumnImportRow(t *testing.T) {
 			if value != testcase.expectedValue {
 				t.Fail()
 				t.Errorf("testcase %d failed: value '%v' did not match the expected value '%v'", testcaseID, value, testcase.expectedValue)
+			}
+		}
+	}
+}
+
+func TestColumnGetRow(t *testing.T) {
+	cases := []struct {
+		col        Column
+		index      int
+		value      interface{}
+		shouldFail bool
+	}{
+		{col: Column{Signature: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, Data: []int{}}, index: 0, shouldFail: true},
+	}
+
+	for testcaseID, testcase := range cases {
+		value, err := testcase.col.GetRow(testcase.index)
+
+		if testcase.shouldFail {
+			if err == nil {
+				t.Errorf("testcase %d unexpectedly did not fail", testcaseID)
+				t.Fail()
+			}
+		} else {
+			if !reflect.DeepEqual(testcase.value, value) {
+				t.Errorf("testcase %d unexpectedly failed: returned value %#v does not match expected value %#v", testcaseID, value, testcase.value)
+				t.Fail()
 			}
 		}
 	}
