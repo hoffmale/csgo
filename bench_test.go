@@ -50,9 +50,9 @@ func BenchmarkComplexSelect(b *testing.B) {
 		{"COMMENT", STRING, NOCOMP},
 	})
 
-	tblPartSupp.Load("D:\\Downloads\\table\\partsupp.tbl", '|')
-	tblSupplier.Load("D:\\Downloads\\table\\supplier.tbl", '|')
-	tblPart.Load("D:\\Downloads\\table\\part.tbl", '|')
+	tblPartSupp.Load("partsupp.tbl", '|')
+	tblSupplier.Load("supplier.tbl", '|')
+	tblPart.Load("part.tbl", '|')
 
 	b.ResetTimer()
 

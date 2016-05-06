@@ -302,7 +302,8 @@ func (r Relation) Print() {
 // corresponding meta information.
 func (r Relation) GetRawData() (cols []interface{}, sigs []AttrInfo) {
 	for _, col := range r.Columns {
-		cols = append(cols, col.Data)
+		rawValues := col.GetRawData()
+		cols = append(cols, rawValues)
 		sigs = append(sigs, col.Signature)
 	}
 	return cols, sigs

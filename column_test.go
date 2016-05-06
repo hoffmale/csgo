@@ -26,58 +26,67 @@ func TestNewColumn(t *testing.T) {
 }
 
 func TestColumnAddRow(t *testing.T) {
-	cases := []struct {
-		sig           AttrInfo
-		data          interface{} // preset values
-		value         interface{}
-		valueType     DataTypes
-		shouldFail    bool
-		expectedIndex int
-		expectedData  interface{}
-	}{
-		// easiest cases
-		{sig: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, data: []int{}, value: int(0), valueType: INT, shouldFail: false, expectedIndex: 0, expectedData: []int{0}},
-		{sig: AttrInfo{Name: "testCol2", Type: FLOAT, Enc: NOCOMP}, data: []float64{}, value: float64(4.5), valueType: FLOAT, shouldFail: false, expectedIndex: 0, expectedData: []float64{4.5}},
-		{sig: AttrInfo{Name: "testCol3", Type: STRING, Enc: NOCOMP}, data: []string{}, value: "testVal", valueType: STRING, shouldFail: false, expectedIndex: 0, expectedData: []string{"testVal"}},
-		// type mismatch (column signature)
-		{sig: AttrInfo{Name: "testCol4", Type: INT, Enc: NOCOMP}, data: []int{}, value: float64(4.5), valueType: FLOAT, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
-		{sig: AttrInfo{Name: "testCol5", Type: INT, Enc: NOCOMP}, data: []int{}, value: "testVal", valueType: STRING, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
-		{sig: AttrInfo{Name: "testCol6", Type: FLOAT, Enc: NOCOMP}, data: []float64{}, value: int(3), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []float64{}},
-		{sig: AttrInfo{Name: "testCol7", Type: FLOAT, Enc: NOCOMP}, data: []float64{}, value: "testVal", valueType: STRING, shouldFail: true, expectedIndex: -1, expectedData: []float64{}},
-		{sig: AttrInfo{Name: "testCol8", Type: STRING, Enc: NOCOMP}, data: []string{}, value: int(5), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []string{}},
-		{sig: AttrInfo{Name: "testCol9", Type: STRING, Enc: NOCOMP}, data: []string{}, value: float64(4.5), valueType: FLOAT, shouldFail: true, expectedIndex: -1, expectedData: []string{}},
-		// type mismatch (parameters)
-		{sig: AttrInfo{Name: "testCol11", Type: INT, Enc: NOCOMP}, data: []int{}, value: float64(3), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
-		// check index
-		{sig: AttrInfo{Name: "testCol10", Type: INT, Enc: NOCOMP}, data: []int{1, 2, 3, 4, 5, 6}, value: int(7), valueType: INT, shouldFail: false, expectedIndex: 6, expectedData: []int{1, 2, 3, 4, 5, 6, 7}},
-	}
-
-	for testcaseID, testcase := range cases {
-		col := NewColumn(testcase.sig)
-		col.Data = testcase.data
-
-		index, err := col.AddRow(testcase.valueType, testcase.value)
-
-		if !reflect.DeepEqual(col.Data, testcase.expectedData) {
-			t.Fail()
-			t.Errorf("testcase %d: data mismatch (got %v, expected %v)", testcaseID, col.Data, testcase.expectedData)
+	encodings := []Compression{NOCOMP, RLE}
+	for _, encoding := range encodings {
+		cases := []struct {
+			sig           AttrInfo
+			data          interface{} // preset values
+			value         interface{}
+			valueType     DataTypes
+			shouldFail    bool
+			expectedIndex int
+			expectedData  interface{}
+		}{
+			// easiest cases
+			{sig: AttrInfo{Name: "testCol1", Type: INT, Enc: encoding}, data: []int{}, value: int(0), valueType: INT, shouldFail: false, expectedIndex: 0, expectedData: []int{0}},
+			{sig: AttrInfo{Name: "testCol2", Type: FLOAT, Enc: encoding}, data: []float64{}, value: float64(4.5), valueType: FLOAT, shouldFail: false, expectedIndex: 0, expectedData: []float64{4.5}},
+			{sig: AttrInfo{Name: "testCol3", Type: STRING, Enc: encoding}, data: []string{}, value: "testVal", valueType: STRING, shouldFail: false, expectedIndex: 0, expectedData: []string{"testVal"}},
+			// type mismatch (column signature)
+			{sig: AttrInfo{Name: "testCol4", Type: INT, Enc: encoding}, data: []int{}, value: float64(4.5), valueType: FLOAT, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
+			{sig: AttrInfo{Name: "testCol5", Type: INT, Enc: encoding}, data: []int{}, value: "testVal", valueType: STRING, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
+			{sig: AttrInfo{Name: "testCol6", Type: FLOAT, Enc: encoding}, data: []float64{}, value: int(3), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []float64{}},
+			{sig: AttrInfo{Name: "testCol7", Type: FLOAT, Enc: encoding}, data: []float64{}, value: "testVal", valueType: STRING, shouldFail: true, expectedIndex: -1, expectedData: []float64{}},
+			{sig: AttrInfo{Name: "testCol8", Type: STRING, Enc: encoding}, data: []string{}, value: int(5), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []string{}},
+			{sig: AttrInfo{Name: "testCol9", Type: STRING, Enc: encoding}, data: []string{}, value: float64(4.5), valueType: FLOAT, shouldFail: true, expectedIndex: -1, expectedData: []string{}},
+			// type mismatch (parameters)
+			{sig: AttrInfo{Name: "testCol11", Type: INT, Enc: encoding}, data: []int{}, value: float64(3), valueType: INT, shouldFail: true, expectedIndex: -1, expectedData: []int{}},
+			// check index
+			{sig: AttrInfo{Name: "testCol10", Type: INT, Enc: encoding}, data: []int{1, 2, 3, 4, 5, 6}, value: int(7), valueType: INT, shouldFail: false, expectedIndex: 6, expectedData: []int{1, 2, 3, 4, 5, 6, 7}},
 		}
 
-		if err != nil {
-			if testcase.shouldFail {
-				continue
-			} else {
-				t.Fail()
-				t.Errorf("testcase %d unexpectedly failed: %v", testcaseID, err)
-			}
-		} else {
-			if testcase.shouldFail {
-				t.Fail()
-				t.Errorf("testcase %d unexpectedly succeeded", testcaseID)
-			} else {
-				if index != testcase.expectedIndex {
+		for testcaseID, testcase := range cases {
+			col := NewColumnWithData(testcase.sig, testcase.data)
+			//col.Data = testcase.data
+			//for _, value := range testcase.data
+
+			index, err := col.AddRow(testcase.valueType, testcase.value)
+
+			if err != nil {
+				if testcase.shouldFail {
+					continue
+				} else {
 					t.Fail()
-					t.Errorf("testcase %d: expected index %d, got %d", testcaseID, testcase.expectedIndex, index)
+					t.Errorf("testcase %d unexpectedly failed: %v", testcaseID, err)
+				}
+			} else {
+				if testcase.shouldFail {
+					t.Fail()
+					t.Errorf("testcase %d unexpectedly succeeded", testcaseID)
+				} else {
+					if index != testcase.expectedIndex {
+						t.Fail()
+						t.Errorf("testcase %d: expected index %d, got %d", testcaseID, testcase.expectedIndex, index)
+					}
+
+					value, err := col.GetRow(index)
+					if err != nil {
+						t.Errorf("testcase %d: couldn't read the added row value (%#v)", testcaseID, err)
+						t.Fail()
+					}
+					if !reflect.DeepEqual(value, testcase.value) {
+						t.Fail()
+						t.Errorf("testcase %d: data mismatch (got %v, expected %v)", testcaseID, col.Data, testcase.expectedData)
+					}
 				}
 			}
 		}
@@ -138,7 +147,7 @@ func TestColumnImportRow(t *testing.T) {
 	}
 }
 
-func TestColumnGetRow(t *testing.T) {
+/*func TestColumnGetRow(t *testing.T) {
 	cases := []struct {
 		col        Column
 		index      int
@@ -163,4 +172,4 @@ func TestColumnGetRow(t *testing.T) {
 			}
 		}
 	}
-}
+}*/

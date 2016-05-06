@@ -8,8 +8,8 @@ import (
 
 func TestRelationLoad_DataMatch(t *testing.T) {
 	r := Relation{Name: "testRel1", Columns: []Column{
-		{Signature: AttrInfo{Name: "col1", Type: INT, Enc: NOCOMP}, Data: make([]int, 0)},
-		{Signature: AttrInfo{Name: "col2", Type: STRING, Enc: NOCOMP}, Data: make([]string, 0)},
+		NewColumn(AttrInfo{Name: "col1", Type: INT, Enc: NOCOMP}),
+		NewColumn(AttrInfo{Name: "col2", Type: STRING, Enc: NOCOMP}),
 	}}
 
 	// create temp file
@@ -33,7 +33,7 @@ func TestRelationLoad_DataMatch(t *testing.T) {
 		t.Errorf("expected 2 columns, found %d", len(cols))
 		t.Fail()
 	} else {
-		if !reflect.DeepEqual([]int{1, 2, 3, 4, 5}, cols[0].Data) || !reflect.DeepEqual([]string{"a", "b", "c", "d", "e"}, cols[1].Data) {
+		if !reflect.DeepEqual([]int{1, 2, 3, 4, 5}, cols[0].GetRawData()) || !reflect.DeepEqual([]string{"a", "b", "c", "d", "e"}, cols[1].GetRawData()) {
 			t.Error("test file content does not match up with relation content")
 			t.Log(cols[0])
 			t.Log(cols[1])
@@ -90,9 +90,9 @@ func TestRelationScan(t *testing.T) {
 	r := Relation{
 		Name: "testRel",
 		Columns: []Column{
-			{Signature: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, Data: []int{1, 2, 3}},
-			{Signature: AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, Data: []string{"testVal1", "testVal2", "testVal3"}},
-			{Signature: AttrInfo{Name: "testCol3", Type: FLOAT, Enc: NOCOMP}, Data: []float64{1.0, 2.0, 3.0}},
+			NewColumnWithData(AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, []int{1, 2, 3}),
+			NewColumnWithData(AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, []string{"testVal1", "testVal2", "testVal3"}),
+			NewColumnWithData(AttrInfo{Name: "testCol3", Type: FLOAT, Enc: NOCOMP}, []float64{1.0, 2.0, 3.0}),
 		},
 	}
 
@@ -138,9 +138,9 @@ func TestRelationScan(t *testing.T) {
 func TestRelationSelect(t *testing.T) {
 	// TODO: write cases
 	r := Relation{Name: "testRel", Columns: []Column{
-		{Signature: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, Data: []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}},
-		{Signature: AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, Data: []string{"val1", "val2", "val1", "val2", "val1", "val2", "val1", "val2", "val1", "val2"}},
-		{Signature: AttrInfo{Name: "testCol3", Type: FLOAT, Enc: NOCOMP}, Data: []float64{1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1}},
+		NewColumnWithData(AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}),
+		NewColumnWithData(AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, []string{"val1", "val2", "val1", "val2", "val1", "val2", "val1", "val2", "val1", "val2"}),
+		NewColumnWithData(AttrInfo{Name: "testCol3", Type: FLOAT, Enc: NOCOMP}, []float64{1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1}),
 	}}
 
 	cases := []struct {
@@ -201,9 +201,9 @@ func TestRelationGetRawData(t *testing.T) {
 			rel: Relation{
 				Name: "testRel3",
 				Columns: []Column{
-					{Signature: AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, Data: []int{1, 2, 3}},
-					{Signature: AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, Data: []string{"testValue1", "testVal2", "testValutas3"}},
-					{Signature: AttrInfo{Name: "testCol3", Type: FLOAT, Enc: NOCOMP}, Data: []float64{1.0, 2.0, 3.0}},
+					NewColumnWithData(AttrInfo{Name: "testCol1", Type: INT, Enc: NOCOMP}, []int{1, 2, 3}),
+					NewColumnWithData(AttrInfo{Name: "testCol2", Type: STRING, Enc: NOCOMP}, []string{"testValue1", "testVal2", "testValutas3"}),
+					NewColumnWithData(AttrInfo{Name: "testCol3", Type: FLOAT, Enc: NOCOMP}, []float64{1.0, 2.0, 3.0}),
 				},
 			},
 			sigs: []AttrInfo{
