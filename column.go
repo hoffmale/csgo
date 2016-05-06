@@ -14,6 +14,9 @@ func NewColumn(sig AttrInfo) Column {
 		col.Data = NewBasicDataStore(sig.Type)
 	case RLE:
 		col.Data = NewRLEDataStore(sig.Type)
+	case DICT:
+		// TODO
+		// XXX
 	default:
 		col.Data = NewBasicDataStore(sig.Type)
 	}
