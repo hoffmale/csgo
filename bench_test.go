@@ -11,7 +11,7 @@ func BenchmarkSimpleSelect(b *testing.B) {
 		{Name: "SUPPLYCOST", Type: FLOAT, Enc: NOCOMP},
 		{Name: "COMMENT", Type: STRING, Enc: NOCOMP},
 	})
-	tblPartSupp.Load("D:\\Downloads\\table\\partsupp.tbl", '|')
+	tblPartSupp.Load("C:\\Users\\karam\\Dropbox\\table\\partsupp.tbl", '|')
 
 	b.ResetTimer()
 
@@ -50,9 +50,9 @@ func BenchmarkComplexSelect(b *testing.B) {
 		{"COMMENT", STRING, NOCOMP},
 	})
 
-	tblPartSupp.Load("partsupp.tbl", '|')
-	tblSupplier.Load("supplier.tbl", '|')
-	tblPart.Load("part.tbl", '|')
+	tblPartSupp.Load("C:\\Users\\karam\\Dropbox\\table\\partsupp.tbl", '|')
+	tblSupplier.Load("C:\\Users\\karam\\Dropbox\\table\\supplier.tbl", '|')
+	tblPart.Load("C:\\Users\\karam\\Dropbox\\table\\part.tbl", '|')
 
 	b.ResetTimer()
 

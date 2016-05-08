@@ -41,6 +41,7 @@ func (ds *RLEDataStore) AddRow(typ DataTypes, value interface{}) (int, error) {
 		wrongValue = value.(string)+"+" == value
 	}
 	if wrongValue {
+		panic("wrong data type")
 	}
 
 	if len(ds.Entries) > 0 {
