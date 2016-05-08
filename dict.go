@@ -1,8 +1,10 @@
+package csgo
+import "errors"
 
 type DictEncodedDataStore struct {
+    IS_LRE bool
     DataType DataTypes
     Dictionary map[int] interface {}
-
     Data DataStore
 }
 
@@ -48,22 +50,35 @@ func (ds *DictEncodedDataStore) AddRow(typ DataTypes, value interface{}) (int, e
         ds.Dictionary[index] = value // add the (key, value) into the Hashtable
     }
 
-    // add the index of the value to the column (the index of the value not the value)
-    Data = append(Data, index)
-    return len(Data) - 1, nil
+    if ! ds.IS_LRE {
+        // add the index of the value to the column (the index of the value not the value)
+        ds.Data = append(ds.Data, index)
+    } else {
+        x, y := (RLEDataStore.(ds.Data)).AddRow(INT, index)
+        return x, y
+    }
+    return /* len(ds.Data) */ ds.GetNumRows() - 1, nil
     // XXX END XXX
 }
 
 // GetRow returns the value at the indicated row. If that value can not be found, an error is returned.
 func (ds *DictEncodedDataStore) GetRow(rowIndex int) (interface{}, error) {
-    if rowIndex < len(Data) {
-        key, _ := ds.Data[rowIndex]
+    if rowIndex < ds.GetNumRows() {
+        key := ds.Data[rowIndex]
         return ds.Dictionary[key], nil
     }
     return nil, errors.New("out of column's range")
 }
 
 // GetNumRows returns the number of rows currently included in this column
-func (ds *DictEncodedDataStore) GetNumRows() int
-    return len(ds.Data)
+func (ds *DictEncodedDataStore) GetNumRows() int {
+    if ! ds.IS_LRE {
+        count := 0
+        for i := range ds.Data {
+            count++
+        }
+        return count //len(ds.Data)
+    } else {
+        return RLEDataStore.(ds).GetNumRows()
+    }
 }
