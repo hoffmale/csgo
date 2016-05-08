@@ -14,6 +14,8 @@ func NewColumn(sig AttrInfo) Column {
 		col.Data = NewBasicDataStore(sig.Type)
 	case RLE:
 		col.Data = NewRLEDataStore(sig.Type)
+	case DICT:
+		col.Data = NewDictEncodedDataStore(sig.Type, NOCOMP)
 	default:
 		col.Data = NewBasicDataStore(sig.Type)
 	}
