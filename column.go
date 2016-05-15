@@ -120,3 +120,18 @@ func (col Column) GetRawData() interface{} {
 
 	panic("unknown data type")
 }
+
+func Seem(sigs1 []AttrInfo, sigs2 []AttrInfo) (int, int) {
+	var left, right int
+
+	for i := 0; i < len(sigs1); i++ {
+		for j := 0; j < len(sigs2); j++ {
+			if sigs1[i] == sigs2[j] {
+				left = i
+				right = j
+			}
+		}
+	}
+
+	return (left, right)
+}

@@ -310,11 +310,84 @@ func (r Relation) GetRawData() (cols []interface{}, sigs []AttrInfo) {
 }
 
 // HashJoin should implement the hash join operator between two relations.
+// rightRelation is the right relation for the hash join
 // joinType specifies the kind of hash join (inner, outer, semi ...)
+// compType specifies the comparison type for the join.
 // The join may be executed on one or more columns of each relation.
-// currently not implemented
-func (r Relation) HashJoin(col1 []AttrInfo, input2 []Column, col2 []AttrInfo, joinType JoinType) Relationer {
-	return nil
+func (r Relation) HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType, compType Comparison) Relationer {
+
+
+	left, right := Seem(col1, col2)
+	// Hashing
+	var hash interface {}
+	switch col1[left].Type {
+		case INT:
+			hash := map[int][]int{}
+		case FLOAT:
+			hash := map[float64][]int{}
+		case STRING:
+			hash := map[string][]int{}
+	}
+
+	// 1. Neue Relation erstellen
+	var cols []Column
+	for i := 0; i < len(col1); i++ {
+		cols = append(cols, NewColumn(col1[i]))
+	}
+	for i := 0; i < len(col2); i++ {
+		if i != right {
+			cols = append(cols, NewColumn(col2[i]))
+		}
+	}
+	var rout Relation {"HashJoin", cols}
+
+
+
+	for i := 0, c := r.Columns[left]; i < c.GetNumRows(); i++ {
+		hash[c.GetRow(i)] = append(hash[c.GetRow(i)], i)
+	}
+
+	// Join :-
+	for i := 0, rc := rightRelation.Columns[right]; i < rc.GetNumRows(); i++ {
+		rg, ok := hash[rc[i]]
+		if ok {
+			for _, k := range rg {
+				for _, c := range r.Columns {
+					for _, oc := range rout.Columns {
+						if oc.Name == c.Name {
+							oc.AddRow(c.Signature.Type, c[k])
+							break
+						}
+					}
+				}
+
+				for _, c := range rightRelation.Columns {
+					for _, oc := range rout.Columns {
+						if (c != rc) &&  (oc.Name == c.Name) {
+							oc.AddRow(c.Signature.Type, c[i])
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return rout
+
+	/*
+    switch joinType {
+        case EQUI:
+
+
+        case SEMI:
+            return nil
+        case LEFTOUTER:
+            return nil
+        case RIGHTOUTER:
+            return nil
+    }
+	*/
 }
 
 // Aggregate should implement the grouping and aggregation of columns.

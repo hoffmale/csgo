@@ -139,9 +139,11 @@ type Relationer interface {
 	GetRawData() ([]interface{}, []AttrInfo)
 
 	// HashJoin should implement the hash join operator between two relations.
+	// rightRelation is the right relation for the hash join
 	// joinType specifies the kind of hash join (inner, outer, semi ...)
+	// compType specifies the comparison type for the join.
 	// The join may be executed on one or more columns of each relation.
-	HashJoin(col1 []AttrInfo, input2 []Column, col2 []AttrInfo, joinType JoinType) Relationer
+	HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType, compType Comparison) Relationer
 
 	// Aggregate should implement the grouping and aggregation of columns.
 	// groupBy specifies on which columns it should be grouped.
