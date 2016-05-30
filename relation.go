@@ -313,7 +313,8 @@ func (r Relation) GetRawData() (cols []interface{}, sigs []AttrInfo) {
 // joinType specifies the kind of hash join (inner, outer, semi ...)
 // The join may be executed on one or more columns of each relation.
 // currently not implemented
-func (r Relation) HashJoin(col1 []AttrInfo, input2 []Column, col2 []AttrInfo, joinType JoinType) Relationer {
+func (r Relation) HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType,
+	compType Comparison) Relationer {
 	return nil
 }
 
@@ -321,6 +322,81 @@ func (r Relation) HashJoin(col1 []AttrInfo, input2 []Column, col2 []AttrInfo, jo
 // groupBy specifies on which columns it should be grouped.
 // aggregate defines the column on which the aggrFunc should be applied.
 // currently not implemented
-func (r Relation) Aggregate(groupBy []AttrInfo, aggregate AttrInfo, aggrFunc AggrFunc) Relationer {
+func (r Relation) Aggregate(aggregate AttrInfo, aggrFunc AggrFunc) Relationer {
 	return nil
+}
+
+// MergeJoin should implement the merge join operator between two relations.
+// joinType specifies the kind of hash join
+func (r Relation) MergeJoin(col1 AttrInfo, rightRelation Relationer, col2 AttrInfo, joinType JoinType, compType Comparison) Relationer {
+	right, isRelation := rightRelation.(Relation)
+
+	if !isRelation {
+		panic("unknown relation type")
+		// TODO: implement using Relationer.GetRawData()
+	}
+
+	output := Relation{Name: r.Name + " x " + right.Name, Columns: []Column{}}
+
+	var leftCol *Column
+	var rightCol *Column
+
+	for i := 0; i < len(r.Columns); i++ {
+		output.Columns = append(output.Columns, NewColumn(r.Columns[i].Signature))
+		if r.Columns[i].Signature == col1 {
+			leftCol = &r.Columns[i]
+		}
+	}
+
+	for i := 0; i < len(right.Columns); i++ {
+		output.Columns = append(output.Columns, NewColumn(right.Columns[i].Signature))
+		if right.Columns[i].Signature == col2 {
+			rightCol = &right.Columns[i]
+		}
+	}
+
+	rightColOffset := len(r.Columns)
+
+	leftIndex, rightIndex := 0, 0
+
+	createTuple := func(leftIndex int, rightIndex int) {
+		for i := 0; i < rightColOffset; i++ {
+			value, _ := r.Columns[i].GetRow(leftIndex)
+			output.Columns[i].AddRow(r.Columns[i].Signature.Type, value)
+		}
+		for i := 0; i < len(right.Columns); i++ {
+			value, _ := right.Columns[i].GetRow(rightIndex)
+			output.Columns[i+rightColOffset].AddRow(right.Columns[i].Signature.Type, value)
+		}
+	}
+
+	eqFunc := compFuncs[col1.Type][EQ]
+	ltFunc := compFuncs[col1.Type][LT]
+
+	for leftIndex < leftCol.GetNumRows() && rightIndex < rightCol.GetNumRows() {
+		leftValue, _ := leftCol.GetRow(leftIndex)
+		rightValue, _ := rightCol.GetRow(rightIndex)
+
+		if eqFunc(leftValue, rightValue) {
+			createTuple(leftIndex, rightIndex)
+
+			nextIndex := rightIndex + 1
+			nextValue, _ := rightCol.GetRow(nextIndex)
+
+			for nextIndex < rightCol.GetNumRows() && eqFunc(leftValue, nextValue) {
+				createTuple(leftIndex, nextIndex)
+
+				nextIndex++
+				nextValue, _ = rightCol.GetRow(nextIndex)
+			}
+
+			leftIndex++
+		} else if ltFunc(leftValue, rightValue) {
+			leftIndex++
+		} else {
+			rightIndex++
+		}
+	}
+
+	return output
 }

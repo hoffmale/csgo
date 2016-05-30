@@ -237,3 +237,37 @@ func TestRelationGetRawData(t *testing.T) {
 		}
 	}
 }
+
+func TestRelationMergeSort(t *testing.T) {
+	cases := []struct {
+		left     Relation
+		right    Relation
+		leftCol  AttrInfo
+		rightCol AttrInfo
+		output   Relation
+	}{
+		{
+			left:     Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
+			right:    Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
+			leftCol:  AttrInfo{"leftCol1", INT, NOCOMP},
+			rightCol: AttrInfo{"rightCol1", INT, NOCOMP},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{2, 3}),
+					NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3}),
+				},
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		output := testCase.left.MergeJoin(testCase.leftCol, testCase.right, testCase.rightCol, INNER, EQ)
+
+		output.Print()
+
+		if !reflect.DeepEqual(output, testCase.output) {
+			t.Fail()
+		}
+	}
+}
