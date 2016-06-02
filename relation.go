@@ -3,6 +3,8 @@ package csgo
 import (
 	"fmt"
 	"strings"
+	"crypto/md5"
+	"io"
 )
 
 // Load should load and insert the data of a CSV file into the column store.
@@ -314,58 +316,49 @@ func (r Relation) GetRawData() (cols []interface{}, sigs []AttrInfo) {
 // joinType specifies the kind of hash join (inner, outer, semi ...)
 // compType specifies the comparison type for the join.
 // The join may be executed on one or more columns of each relation.
-func (r Relation) HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType, compType Comparison) Relationer {
+func (r Relation) HashJoin(col1 []AttrInfo,
+	rightRelation Relationer, col2 []AttrInfo,
+	joinType JoinType, compType Comparison) Relationer {
 
 
-	left, right := Seem(col1, col2)
+	left, right, cols := Rebuilding(col1, col2)
 	// Hashing
-	var hash interface {}
+	var hash interface {} // map[][]int{}
 	switch col1[left].Type {
 		case INT:
-			hash := map[int][]int{}
+			hash = make(map[int][]int{}, 0)
 		case FLOAT:
-			hash := map[float64][]int{}
+			hash = make(map[float64][]int{}, 0)
 		case STRING:
-			hash := map[string][]int{}
+			hash = make(map[string][]int{}, 0)
+	}
+
+	for i := 0; i < r.GetNumRows(); i++ {
+		hash = append(hash[r.Columns[left].GetRow()], i)
+
 	}
 
 	// 1. Neue Relation erstellen
-	var cols []Column
-	for i := 0; i < len(col1); i++ {
-		cols = append(cols, NewColumn(col1[i]))
-	}
-	for i := 0; i < len(col2); i++ {
-		if i != right {
-			cols = append(cols, NewColumn(col2[i]))
-		}
-	}
-	var rout Relation {"HashJoin", cols}
-
-
-
-	for i := 0, c := r.Columns[left]; i < c.GetNumRows(); i++ {
-		hash[c.GetRow(i)] = append(hash[c.GetRow(i)], i)
-	}
+	var rout Relation //{"HashJoin", cols}
+	rout.Name = "HASH"
+	rout.Columns = cols
 
 	// Join :-
-	for i := 0, rc := rightRelation.Columns[right]; i < rc.GetNumRows(); i++ {
-		rg, ok := hash[rc[i]]
-		if ok {
-			for _, k := range rg {
-				for _, c := range r.Columns {
-					for _, oc := range rout.Columns {
-						if oc.Name == c.Name {
-							oc.AddRow(c.Signature.Type, c[k])
-							break
-						}
-					}
-				}
+	for index := 0; index < rightRelation.GetNumRows(); index++ {
+		refs, ok := hash[rightRelation.Columns[right].GetRow(index)]
 
-				for _, c := range rightRelation.Columns {
-					for _, oc := range rout.Columns {
-						if (c != rc) &&  (oc.Name == c.Name) {
-							oc.AddRow(c.Signature.Type, c[i])
-							break
+		if ok {
+			for _, ref := range refs {
+				for j, _ := range rout.Columns {
+					if j < len(col1) {
+						rout.Columns[j] = append(rout.Columns[j], r.Columns[j].GetRow(ref))
+					} else {
+						if j - len(col1) < right {
+							rout.Columns[j] = append(rout.Columns[j], rightRelation.Columns[j - len(col1)].GetRow(index))
+						} else {
+							if j - len(col1) > right {
+								rout.Columns[j] = append(rout.Columns[j - 1], rightRelation.Columns[j - len(col1)].GetRow(index))
+							}
 						}
 					}
 				}
@@ -374,26 +367,85 @@ func (r Relation) HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []Att
 	}
 
 	return rout
-
-	/*
-    switch joinType {
-        case EQUI:
-
-
-        case SEMI:
-            return nil
-        case LEFTOUTER:
-            return nil
-        case RIGHTOUTER:
-            return nil
-    }
-	*/
 }
 
 // Aggregate should implement the grouping and aggregation of columns.
 // groupBy specifies on which columns it should be grouped.
 // aggregate defines the column on which the aggrFunc should be applied.
 // currently not implemented
+
+func hash_group(args []interface) {
+	h := md5.New()
+	for _, arg := range args {
+        io.WriteString(h, arg)
+    }
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 func (r Relation) Aggregate(groupBy []AttrInfo, aggregate AttrInfo, aggrFunc AggrFunc) Relationer {
-	return nil
+	var cols []Column
+	for j := 0; j < len(r.Columns); j++ {
+		cols = append(cols, NewColumn(r.Columns[i].Signature))
+	}
+
+	var rout Relation
+	rout.Name = "Aggregate"
+	rout.Columns = cols
+
+	hash_table := make(map[int][]interface{}, 0)
+	hash_group := make(map[int][]interface{}, 0)
+	for i := 0; i < r.GetNumRows(); i++ {
+		key := hash_func(i)
+		val, ok := hash[key]
+
+		if ok {
+			// update the matching row
+			hash_table[key] = []interface {}
+			hash_group[key] = []interface {}
+		}
+
+		for j := 0; j < len(r.Columns); j++ {
+			// XXX
+			/* if ok {
+				if ! contains(groupBy, r.Columns[j].Signature) {
+					if r.Columns[j].Signature == aggregate {
+						rout.Columns[j] = aggrFunc(r.Columns[j])
+						//hash[key] = append(hash[key], aggrFunc(r.Columns[j]))
+					} else {
+						hash[key] = append(hash[key], r.Columns[j].GetRow(i))
+					}
+				}
+			} */
+			// XXX
+
+			if ! contains(groupBy, r.Columns[j].Signature) {
+				if r.Columns[j].Signature == aggregate {
+					hash_table[key] = append(hash_table[key], aggrFunc(r.Columns[j]))
+				} else {
+					hash_table[key] = append(hash_table[key], r.Columns[j].GetRow(i))
+				}
+			} else {
+				_, ok := hash_group[key]
+				if ! ok {
+					hash_group[key] = append(hash_group[key], r.Columns[j].GetRow(i))
+				}
+			}
+		}
+	}
+
+	for key, gc := range hash_group {
+		i:= 0
+
+		for _, val := range gc {
+			rout.Columns[i].AddRow(r.Columns[i].Signature.Type, val)
+			i = i + 1
+		}
+
+		for _, val := range hash_table[key] {
+			rout.Columns[i].AddRow(r.Columns[i].Signature.Type, val)
+			i = i + 1
+		}
+	}
+
+	return rout
 }

@@ -121,10 +121,12 @@ func (col Column) GetRawData() interface{} {
 	panic("unknown data type")
 }
 
-func Seem(sigs1 []AttrInfo, sigs2 []AttrInfo) (int, int) {
+func Rebuilding(sigs1 []AttrInfo, sigs2 []AttrInfo) (int, int, []Column) {
 	var left, right int
+    var cols []Column
 
 	for i := 0; i < len(sigs1); i++ {
+        cols = append(cols, NewColumn(sigs1[i]))
 		for j := 0; j < len(sigs2); j++ {
 			if sigs1[i] == sigs2[j] {
 				left = i
@@ -133,5 +135,11 @@ func Seem(sigs1 []AttrInfo, sigs2 []AttrInfo) (int, int) {
 		}
 	}
 
-	return (left, right)
+    for i := 0; i < len(sig2); i++ {
+        if i != right {
+            cols = append(cols, NewColumn(sigs2[i]))
+        }
+    }
+
+	return left, right, cols
 }
