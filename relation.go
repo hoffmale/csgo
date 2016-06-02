@@ -40,7 +40,7 @@ func (r Relation) Load(csvFile string, separator rune) {
 
 // Scan should simply return the specified columns of the relation.
 func (r Relation) Scan(colList []AttrInfo) Relationer {
-	result := Relation{Name: r.Name + " (scanned)", Columns: []Column{}}
+	result := Relation{Name: r.Name, Columns: []Column{}}
 
 	for _, col := range r.Columns {
 		included := false
@@ -81,6 +81,18 @@ var compFuncs = map[DataTypes]map[Comparison]CompFunc{
 		NEQ: func(value1 interface{}, value2 interface{}) bool { return value1.(float64) != value2.(float64) },
 	},
 	STRING: map[Comparison]CompFunc{
+		LT: func(value1 interface{}, value2 interface{}) bool {
+			return strings.Compare(value1.(string), value2.(string)) < 0
+		},
+		GT: func(value1 interface{}, value2 interface{}) bool {
+			return strings.Compare(value1.(string), value2.(string)) > 0
+		},
+		LEQ: func(value1 interface{}, value2 interface{}) bool {
+			return strings.Compare(value1.(string), value2.(string)) <= 0
+		},
+		GEQ: func(value1 interface{}, value2 interface{}) bool {
+			return strings.Compare(value1.(string), value2.(string)) >= 0
+		},
 		EQ:  func(value1 interface{}, value2 interface{}) bool { return value1.(string) == value2.(string) },
 		NEQ: func(value1 interface{}, value2 interface{}) bool { return !(value1.(string) == value2.(string)) },
 	},
@@ -92,7 +104,7 @@ var compFuncs = map[DataTypes]map[Comparison]CompFunc{
 // comp defines the type of comparison.
 // compVal is the value used for the comparison.
 func (r Relation) Select(col AttrInfo, comp Comparison, compVal interface{}) Relationer {
-	result := Relation{Name: r.Name + " (selection)", Columns: []Column{}}
+	result := Relation{Name: r.Name, Columns: []Column{}}
 
 	var filterColumn Column
 	for _, cols := range r.Columns {
@@ -326,9 +338,139 @@ func (r Relation) Aggregate(aggregate AttrInfo, aggrFunc AggrFunc) Relationer {
 	return nil
 }
 
+// SortOrder is an enumeration type for all supported sorting modes
+type SortOrder int
+
+const (
+	// ASC specifies ascending sorting order
+	ASC SortOrder = iota
+	// DESC specifies descending sorting order
+	DESC
+)
+
+// MergeSort creates a new ordered Relation
+// columns specifies the columns which should be sorted (in order of sorting)
+// sortOrder specifies the sorting order
+func (r Relation) MergeSort(columns []AttrInfo, sortOrder SortOrder) Relationer {
+	type SortData struct {
+		Column  *Column
+		Compare CompFunc
+		Equals  CompFunc
+	}
+
+	sortData := make([]SortData, len(columns))
+	output := Relation{}
+
+	compare := func(aIndex int, bIndex int) bool {
+		for _, curStep := range sortData {
+			aValue, _ := curStep.Column.GetRow(aIndex)
+			bValue, _ := curStep.Column.GetRow(bIndex)
+
+			if curStep.Compare(aValue, bValue) {
+				return true
+			}
+			if !curStep.Equals(aValue, bValue) {
+				return false
+			}
+		}
+		// rows are identical, order doesn't matter
+		return true
+	}
+
+	merge := func(listA []int, listB []int) []int {
+		output := make([]int, len(listA)+len(listB))
+
+		aIndex, bIndex := 0, 0
+
+		for aIndex < len(listA) && bIndex < len(listB) {
+			if !compare(listA[aIndex], listB[bIndex]) {
+				output[aIndex+bIndex] = listB[bIndex]
+				bIndex++
+			} else {
+				output[aIndex+bIndex] = listA[aIndex]
+				aIndex++
+			}
+		}
+
+		for ; aIndex < len(listA); aIndex++ {
+			output[aIndex+bIndex] = listA[aIndex]
+		}
+
+		for ; bIndex < len(listB); bIndex++ {
+			output[aIndex+bIndex] = listB[bIndex]
+		}
+
+		return output
+	}
+
+	var mergeSort func([]int) []int
+	mergeSort = func(list []int) []int {
+		if len(list) == 1 {
+			return list
+		}
+
+		return merge(mergeSort(list[:len(list)/2]), mergeSort(list[len(list)/2:]))
+	}
+
+	setup := func() {
+		// setup sortData
+		compType := LT
+		if sortOrder == DESC {
+			compType = GT
+		}
+
+		for index, signature := range columns {
+			for colIndex, col := range r.Columns {
+				if col.Signature == signature {
+					sortData[index] = SortData{
+						Column:  &r.Columns[colIndex],
+						Equals:  compFuncs[signature.Type][EQ],
+						Compare: compFuncs[signature.Type][compType],
+					}
+				}
+			}
+		}
+
+		// init output Relation
+		output.Name = r.Name + "(sorted)"
+		output.Columns = []Column{}
+
+		for _, col := range r.Columns {
+			output.Columns = append(output.Columns, NewColumn(col.Signature))
+		}
+	}
+
+	createIota := func(length int) []int {
+		output := make([]int, length)
+
+		for i := 0; i < length; i++ {
+			output[i] = i
+		}
+
+		return output
+	}
+
+	copyColValues := func(source *Column, dest *Column, order []int) {
+		for _, index := range order {
+			value, _ := source.GetRow(index)
+			dest.AddRow(source.Signature.Type, value)
+		}
+	}
+
+	copyValues := func(indices []int) {
+		for colIndex := range r.Columns {
+			copyColValues(&r.Columns[colIndex], &output.Columns[colIndex], indices)
+		}
+	}
+
+	setup()
+	copyValues(mergeSort(createIota(r.Columns[0].GetNumRows())))
+	return output
+}
+
 // MergeJoin should implement the merge join operator between two relations.
 // joinType specifies the kind of hash join
-func (r Relation) MergeJoin(col1 AttrInfo, rightRelation Relationer, col2 AttrInfo, joinType JoinType, compType Comparison) Relationer {
+func (r Relation) MergeJoin(leftCols []AttrInfo, rightRelation Relationer, rightCols []AttrInfo, joinType JoinType, compType Comparison) Relationer {
 	right, isRelation := rightRelation.(Relation)
 
 	if !isRelation {
@@ -336,66 +478,255 @@ func (r Relation) MergeJoin(col1 AttrInfo, rightRelation Relationer, col2 AttrIn
 		// TODO: implement using Relationer.GetRawData()
 	}
 
-	output := Relation{Name: r.Name + " x " + right.Name, Columns: []Column{}}
+	type MergeData struct {
+		Left    *Column
+		Right   *Column
+		Compare CompFunc
+		Lesser  CompFunc
+		Equals  CompFunc
+	}
 
-	var leftCol *Column
-	var rightCol *Column
+	right = right.MergeSort(rightCols, ASC).(Relation)
+	left := r.MergeSort(leftCols, ASC).(Relation)
+	output := Relation{Columns: []Column{}}
 
-	for i := 0; i < len(r.Columns); i++ {
-		output.Columns = append(output.Columns, NewColumn(r.Columns[i].Signature))
-		if r.Columns[i].Signature == col1 {
-			leftCol = &r.Columns[i]
+	leftIndices := []int{}
+	rightIndices := []int{}
+
+	leftRow, rightRow := 0, 0
+	maxLeftRows := left.Columns[0].GetNumRows()
+	maxRightRows := right.Columns[0].GetNumRows()
+	var mergeData []MergeData
+
+	addOutputCols := func(base *Relation, tableName string, nullable bool) {
+		if nullable {
+			panic("NULL values not implemented")
+		}
+		for _, col := range base.Columns {
+			signature := AttrInfo{Name: tableName + "." + col.Signature.Name, Enc: col.Signature.Enc, Type: col.Signature.Type}
+			output.Columns = append(output.Columns, NewColumn(signature))
 		}
 	}
 
-	for i := 0; i < len(right.Columns); i++ {
-		output.Columns = append(output.Columns, NewColumn(right.Columns[i].Signature))
-		if right.Columns[i].Signature == col2 {
-			rightCol = &right.Columns[i]
-		}
-	}
+	getMergeData := func() []MergeData {
+		output := []MergeData{}
 
-	rightColOffset := len(r.Columns)
+		for sigIndex, signature := range leftCols {
+			entry := MergeData{}
 
-	leftIndex, rightIndex := 0, 0
-
-	createTuple := func(leftIndex int, rightIndex int) {
-		for i := 0; i < rightColOffset; i++ {
-			value, _ := r.Columns[i].GetRow(leftIndex)
-			output.Columns[i].AddRow(r.Columns[i].Signature.Type, value)
-		}
-		for i := 0; i < len(right.Columns); i++ {
-			value, _ := right.Columns[i].GetRow(rightIndex)
-			output.Columns[i+rightColOffset].AddRow(right.Columns[i].Signature.Type, value)
-		}
-	}
-
-	eqFunc := compFuncs[col1.Type][EQ]
-	ltFunc := compFuncs[col1.Type][LT]
-
-	for leftIndex < leftCol.GetNumRows() && rightIndex < rightCol.GetNumRows() {
-		leftValue, _ := leftCol.GetRow(leftIndex)
-		rightValue, _ := rightCol.GetRow(rightIndex)
-
-		if eqFunc(leftValue, rightValue) {
-			createTuple(leftIndex, rightIndex)
-
-			nextIndex := rightIndex + 1
-			nextValue, _ := rightCol.GetRow(nextIndex)
-
-			for nextIndex < rightCol.GetNumRows() && eqFunc(leftValue, nextValue) {
-				createTuple(leftIndex, nextIndex)
-
-				nextIndex++
-				nextValue, _ = rightCol.GetRow(nextIndex)
+			for colIndex, col := range left.Columns {
+				if col.Signature == signature {
+					entry.Left = &left.Columns[colIndex]
+					break
+				}
 			}
 
-			leftIndex++
-		} else if ltFunc(leftValue, rightValue) {
-			leftIndex++
-		} else {
-			rightIndex++
+			for colIndex, col := range right.Columns {
+				if col.Signature == rightCols[sigIndex] {
+					entry.Right = &right.Columns[colIndex]
+					break
+				}
+			}
+
+			if entry.Left == nil || entry.Right == nil {
+				panic("column not found")
+			}
+
+			entry.Equals = compFuncs[signature.Type][EQ]
+			entry.Lesser = compFuncs[signature.Type][LT]
+
+			output = append(output, entry)
 		}
+
+		return output
+	}
+
+	isEqual := func(leftIndex int, rightIndex int) bool {
+		for _, entry := range mergeData {
+			leftValue, _ := entry.Left.GetRow(leftIndex)
+			rightValue, _ := entry.Right.GetRow(rightIndex)
+			if !entry.Equals(leftValue, rightValue) {
+				return false
+			}
+		}
+		return true
+	}
+
+	isLesser := func(leftIndex, rightIndex int) bool {
+		for _, entry := range mergeData {
+			leftValue, _ := entry.Left.GetRow(leftIndex)
+			rightValue, _ := entry.Right.GetRow(rightIndex)
+
+			if entry.Lesser(leftValue, rightValue) {
+				return true
+			}
+			if !entry.Equals(leftValue, rightValue) {
+				return false
+			}
+		}
+		// entries are equal
+		return false
+	}
+
+	getNextRow := func(compare func(int, int) bool) int {
+		nextRow := rightRow + 1
+
+		for nextRow < maxRightRows && compare(leftRow, nextRow) {
+			nextRow++
+		}
+
+		return nextRow
+	}
+
+	innerJoin := func() ([]int, []int) {
+		mergeData = getMergeData()
+
+		for leftRow < maxLeftRows && rightRow < maxRightRows {
+			if isEqual(leftRow, rightRow) {
+				// leftValue == rightValue
+				nextRow := getNextRow(isEqual)
+
+				switch compType {
+				case GT:
+					for i := 0; i < rightRow; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				case GEQ:
+					for i := 0; i < nextRow; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				case LT:
+					for i := nextRow; i < maxRightRows; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				case LEQ:
+					for i := rightRow; i < maxRightRows; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				case EQ:
+					for i := rightRow; i < nextRow; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				case NEQ:
+					for i := 0; i < rightRow; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+					for i := nextRow; i < maxRightRows; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				}
+
+				leftRow++
+			} else if isLesser(leftRow, rightRow) {
+				// leftValue < rightValue
+				switch compType {
+				case GT, GEQ:
+					for i := 0; i < rightRow; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				case LT, LEQ:
+					for i := rightRow; i < maxRightRows; i++ {
+						leftIndices = append(leftIndices, leftRow)
+						rightIndices = append(rightIndices, i)
+					}
+				case NEQ:
+					for i := 0; i < maxRightRows; i++ {
+						if !isEqual(leftRow, i) {
+							leftIndices = append(leftIndices, leftRow)
+							rightIndices = append(rightIndices, i)
+						}
+					}
+				}
+
+				leftRow++
+			} else {
+				// leftValue > rightValue
+				nextRow := getNextRow(func(l, r int) bool { return !isEqual(l, r) && !isLesser(l, r) })
+
+				switch compType {
+				case NEQ:
+					// do something?
+				}
+
+				rightRow = nextRow
+			}
+		}
+
+		return leftIndices, rightIndices
+	}
+
+	semiJoin := func() {
+		mergeData = getMergeData()
+
+		if compType != EQ {
+			panic("semi join only supports equality comparison")
+		}
+
+		for leftRow < maxLeftRows && rightRow < maxRightRows {
+			if isEqual(leftRow, rightRow) {
+				leftIndices = append(leftIndices, leftRow)
+
+				leftRow++
+			} else if isLesser(leftRow, rightRow) {
+				leftRow++
+			} else {
+				nextRow := getNextRow(func(l, r int) bool { return !isEqual(l, r) && !isLesser(l, r) })
+				rightRow = nextRow
+			}
+		}
+	}
+
+	copyColumn := func(source *Column, dest *Column, indices []int) {
+		for _, row := range indices {
+			value, _ := source.GetRow(row)
+			dest.AddRow(source.Signature.Type, value)
+		}
+	}
+
+	copyLeftValues := func(indices []int) {
+		for colIndex := range left.Columns {
+			copyColumn(&left.Columns[colIndex], &output.Columns[colIndex], indices)
+		}
+	}
+
+	copyRightValues := func(indices []int) {
+		numLeftCols := len(left.Columns)
+		for colIndex := range right.Columns {
+			copyColumn(&right.Columns[colIndex], &output.Columns[numLeftCols+colIndex], indices)
+		}
+	}
+
+	switch joinType {
+	case INNER:
+		output.Name = r.Name + " x " + rightRelation.(Relation).Name
+		addOutputCols(&left, r.Name, false)
+		addOutputCols(&right, rightRelation.(Relation).Name, false)
+		innerJoin()
+		copyLeftValues(leftIndices)
+		copyRightValues(rightIndices)
+		break
+	case SEMI:
+		output.Name = r.Name + " (x " + rightRelation.(Relation).Name + ")"
+		addOutputCols(&left, r.Name, false)
+		semiJoin()
+		copyLeftValues(leftIndices)
+		break
+	case LEFTOUTER:
+		// handle null values on left
+		panic("NULL values not implemented")
+	case RIGHTOUTER:
+		// handle null values on right
+		panic("NULL values not implemented")
+	default:
+		panic("unknown JoinType")
 	}
 
 	return output

@@ -1,6 +1,7 @@
 package csgo
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -240,34 +241,217 @@ func TestRelationGetRawData(t *testing.T) {
 
 func TestRelationMergeSort(t *testing.T) {
 	cases := []struct {
-		left     Relation
-		right    Relation
-		leftCol  AttrInfo
-		rightCol AttrInfo
-		output   Relation
+		left      Relation
+		right     Relation
+		leftCols  []AttrInfo
+		rightCols []AttrInfo
+		output    Relation
+		joinType  JoinType
+		compType  Comparison
 	}{
 		{
-			left:     Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
-			right:    Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
-			leftCol:  AttrInfo{"leftCol1", INT, NOCOMP},
-			rightCol: AttrInfo{"rightCol1", INT, NOCOMP},
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
 			output: Relation{
 				Name: "left x right",
 				Columns: []Column{
-					NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{2, 3}),
-					NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3}),
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{2, 3}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{2, 3}),
 				},
 			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", FLOAT, NOCOMP}, []float64{0.0, 0.1, 0.2, 0.3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", FLOAT, NOCOMP}, []float64{0.0, 0.2, 0.4, 0.6})}},
+			leftCols:  []AttrInfo{{"leftCol1", FLOAT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", FLOAT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", FLOAT, NOCOMP}, []float64{0.0, 0.2}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", FLOAT, NOCOMP}, []float64{0.0, 0.2}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", STRING, NOCOMP}, []string{"a", "aa", "b", "bb", "c", "cc"})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", STRING, NOCOMP}, []string{"a", "ab", "b", "bb", "c", "cb"})}},
+			leftCols:  []AttrInfo{{"leftCol1", STRING, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", STRING, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", STRING, NOCOMP}, []string{"a", "b", "bb", "c"}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", STRING, NOCOMP}, []string{"a", "b", "bb", "c"}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{1, 1, 1, 2, 2, 3}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{2, 3, 4, 3, 4, 4}),
+				},
+			},
+			joinType: INNER,
+			compType: LT,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{1, 1, 1, 2, 2, 2, 3, 3}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{2, 3, 4, 2, 3, 4, 3, 4}),
+				},
+			},
+			joinType: INNER,
+			compType: LEQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{3}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{2}),
+				},
+			},
+			joinType: INNER,
+			compType: GT,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{2, 3, 3}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{2, 2, 3}),
+				},
+			},
+			joinType: INNER,
+			compType: GEQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{2, 3, 4})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{1, 1, 1, 2, 2, 3, 3}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{2, 3, 4, 3, 4, 2, 4}),
+				},
+			},
+			joinType: INNER,
+			compType: NEQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 1, 2, 2, 3, 3, 4, 4, 5, 5})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{1, 1, 2, 2, 5, 5})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 5, 5, 1, 1, 2, 2, 5, 5}),
+				},
+			},
+			joinType: INNER,
+			compType: GEQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 1, 2, 2, 3, 3, 4, 4, 5, 5})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{1, 1, 2, 2, 5, 5})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{2, 2, 5, 5, 2, 2, 5, 5, 1, 1, 5, 5, 1, 1, 5, 5, 1, 1, 2, 2, 5, 5, 1, 1, 2, 2, 5, 5, 1, 1, 2, 2, 5, 5, 1, 1, 2, 2, 5, 5, 1, 1, 2, 2, 1, 1, 2, 2}),
+				},
+			},
+			joinType: INNER,
+			compType: NEQ,
+		},
+		{
+			left: Relation{
+				Name: "left",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 1, 2, 2, 3, 3, 4, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"leftCol2", INT, NOCOMP}, []int{1, 2, 1, 2, 1, 2, 1, 2, 1, 2}),
+				},
+			},
+			right: Relation{
+				Name: "right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{1, 2, 3, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"rightCol2", INT, NOCOMP}, []int{1, 2, 1, 2, 1, 2}),
+				},
+			},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}, {"leftCol2", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}, {"rightCol2", INT, NOCOMP}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{1, 2, 3, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"left.leftCol2", INT, NOCOMP}, []int{1, 2, 1, 2, 1, 2}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP}, []int{1, 2, 3, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"right.rightCol2", INT, NOCOMP}, []int{1, 2, 1, 2, 1, 2}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP}, []int{1, 2, 3, 4, 5})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP}, []int{1, 1, 2, 2, 4, 5})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP}},
+			output: Relation{
+				Name: "left (x right)",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP}, []int{1, 2, 4, 5}),
+				},
+			},
+			joinType: SEMI,
+			compType: EQ,
 		},
 	}
 
 	for _, testCase := range cases {
-		output := testCase.left.MergeJoin(testCase.leftCol, testCase.right, testCase.rightCol, INNER, EQ)
+		output := testCase.left.MergeJoin(testCase.leftCols, testCase.right, testCase.rightCols, testCase.joinType, testCase.compType)
 
 		output.Print()
 
 		if !reflect.DeepEqual(output, testCase.output) {
 			t.Fail()
+			fmt.Println("fail")
 		}
 	}
 }
