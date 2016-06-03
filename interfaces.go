@@ -85,6 +85,16 @@ const (
 	STRING
 )
 
+// ColumnFlags is enumeration of all supported column flags
+type ColumnFlags int
+
+const (
+	// NULLABLE indicates that there can be NULL values in this column
+	NULLABLE = 0x1
+	// GROUPED indicates that values in this column are grouped
+	GROUPED = 0x2
+)
+
 // AttrInfo contains meta information about a column (name and type).
 type AttrInfo struct {
 	// Name is the name of the column.
@@ -93,6 +103,8 @@ type AttrInfo struct {
 	Type DataTypes
 	// Enc defines the encoding of this column.
 	Enc Compression
+	// Flags defines the flags for this column
+	Flags ColumnFlags
 }
 
 // Column is a single column containing the signature and the payload.
@@ -141,8 +153,7 @@ type Relationer interface {
 	// joinType specifies the kind of hash join (inner, outer, semi ...)
 	// compType specifies the comparison type for the join.
 	// The join may be executed on one or more columns of each relation.
-	HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType,
-		compType Comparison) Relationer
+	HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType, compType Comparison) Relationer
 
 	// Aggregate should implement the grouping and aggregation of columns.
 	// aggregate defines the column on which the aggrFunc should be applied.

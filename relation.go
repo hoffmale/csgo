@@ -322,12 +322,362 @@ func (r Relation) GetRawData() (cols []interface{}, sigs []AttrInfo) {
 }
 
 // HashJoin should implement the hash join operator between two relations.
+// rightRelation is the right relation for the hash join
 // joinType specifies the kind of hash join (inner, outer, semi ...)
+// compType specifies the comparison type for the join.
 // The join may be executed on one or more columns of each relation.
-// currently not implemented
-func (r Relation) HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType,
-	compType Comparison) Relationer {
-	return nil
+func (r Relation) HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []AttrInfo, joinType JoinType, compType Comparison) Relationer {
+	if compType != EQ {
+		panic("HashJoin requires an equijoin predicate")
+	}
+
+	// get both relations as *Relation, left = the one with fewer entries
+	rightR, isRelation := (rightRelation).(Relation)
+
+	if !isRelation {
+		panic("unknown relation type")
+	}
+
+	right := &rightR
+	left := &r
+
+	output := Relation{Name: r.Name + " x " + right.Name, Columns: []Column{}}
+
+	// create hash table with left values
+	findCol := func(rel *Relation, colSig AttrInfo) *Column {
+		for colIndex, col := range rel.Columns {
+			if col.Signature == colSig {
+				return &rel.Columns[colIndex]
+			}
+		}
+
+		return nil
+	}
+
+	createHashTable := func(col *Column) interface{} {
+		switch col.Signature.Type {
+		case INT:
+			hash := map[int][]int{}
+
+			for i := 0; i < col.GetNumRows(); i++ {
+				value, _ := col.GetRow(i)
+				hash[value.(int)] = append(hash[value.(int)], i)
+			}
+
+			return hash
+
+		case FLOAT:
+			hash := map[float64][]int{}
+
+			for i := 0; i < col.GetNumRows(); i++ {
+				value, _ := col.GetRow(i)
+				hash[value.(float64)] = append(hash[value.(float64)], i)
+			}
+
+			return hash
+		case STRING:
+			hash := map[string][]int{}
+
+			for i := 0; i < col.GetNumRows(); i++ {
+				value, _ := col.GetRow(i)
+				hash[value.(string)] = append(hash[value.(string)], i)
+			}
+
+			return hash
+		}
+
+		panic("unknown failure (type unknown?)")
+	}
+
+	hashTables := []interface{}{}
+
+	createHashTables := func(rel *Relation, cols []AttrInfo) {
+		for i := 0; i < len(cols); i++ {
+			hashTables = append(hashTables, createHashTable(findCol(rel, cols[i])))
+		}
+	}
+
+	getMatch := func(hashTable interface{}, col *Column, row int) []int {
+		switch col.Signature.Type {
+		case INT:
+			hash := hashTable.(map[int][]int)
+			value, _ := col.GetRow(row)
+			return hash[value.(int)]
+		case FLOAT:
+			hash := hashTable.(map[float64][]int)
+			value, _ := col.GetRow(row)
+			return hash[value.(float64)]
+		case STRING:
+			hash := hashTable.(map[string][]int)
+			value, _ := col.GetRow(row)
+			return hash[value.(string)]
+		}
+		return []int{}
+	}
+
+	joinMatches := func(oldMatches, newMatches []int) []int {
+		output := []int{}
+
+		for i := 0; i < len(newMatches); i++ {
+			for j := 0; j < len(oldMatches); j++ {
+				if newMatches[i] == oldMatches[j] {
+					output = append(output, newMatches[i])
+					break
+				}
+			}
+		}
+
+		return output
+	}
+
+	checkRow := func(rel *Relation, cols []AttrInfo, rowIndex int) []int {
+		matches := getMatch(hashTables[0], findCol(rel, cols[0]), rowIndex)
+		for i := 1; i < len(cols) && len(matches) > 0; i++ {
+			matches = joinMatches(matches, getMatch(hashTables[i], findCol(rel, cols[i]), rowIndex))
+		}
+		return matches
+	}
+
+	maxLeftRows := left.Columns[0].GetNumRows()
+	maxRightRows := right.Columns[0].GetNumRows()
+	leftIndices := []int{}
+	rightIndices := []int{}
+
+	addOutputCols := func(base *Relation, tableName string, nullable bool) {
+		if nullable {
+			panic("NULL values not implemented")
+		}
+		for _, col := range base.Columns {
+			signature := AttrInfo{Name: tableName + "." + col.Signature.Name, Enc: col.Signature.Enc, Type: col.Signature.Type}
+			output.Columns = append(output.Columns, NewColumn(signature))
+		}
+	}
+
+	copyColumn := func(source *Column, dest *Column, indices []int) {
+		for _, row := range indices {
+			value, _ := source.GetRow(row)
+			dest.AddRow(source.Signature.Type, value)
+		}
+	}
+
+	copyLeftValues := func(indices []int) {
+		for colIndex := range left.Columns {
+			copyColumn(&left.Columns[colIndex], &output.Columns[colIndex], indices)
+		}
+	}
+
+	copyRightValues := func(indices []int) {
+		numLeftCols := len(left.Columns)
+		for colIndex := range right.Columns {
+			copyColumn(&right.Columns[colIndex], &output.Columns[numLeftCols+colIndex], indices)
+		}
+	}
+
+	innerJoin := func() {
+		if maxLeftRows < maxRightRows {
+			createHashTables(left, col1)
+
+			for i := 0; i < maxRightRows; i++ {
+				matches := checkRow(right, col2, i)
+
+				if len(matches) > 0 {
+					for j := 0; j < len(matches); j++ {
+						leftIndices = append(leftIndices, matches[j])
+						rightIndices = append(rightIndices, i)
+					}
+				}
+			}
+		} else {
+			createHashTables(right, col2)
+
+			for i := 0; i < maxLeftRows; i++ {
+				matches := checkRow(left, col1, i)
+
+				if len(matches) > 0 {
+					for j := 0; j < len(matches); j++ {
+						leftIndices = append(leftIndices, i)
+						rightIndices = append(rightIndices, matches[j])
+					}
+				}
+			}
+		}
+	}
+
+	semiJoin := func() {
+		createHashTables(right, col2)
+
+		for i := 0; i < maxLeftRows; i++ {
+			matches := checkRow(left, col1, i)
+
+			if len(matches) > 0 {
+				leftIndices = append(leftIndices, i)
+			}
+		}
+	}
+
+	switch joinType {
+	case INNER:
+		addOutputCols(left, left.Name, false)
+		addOutputCols(right, right.Name, false)
+		innerJoin()
+		copyLeftValues(leftIndices)
+		copyRightValues(rightIndices)
+	case SEMI:
+		output.Name = left.Name + " (x " + right.Name + ")"
+		addOutputCols(left, left.Name, false)
+		semiJoin()
+		copyLeftValues(leftIndices)
+	case RIGHTOUTER:
+		panic("NULL values not implemented")
+	case LEFTOUTER:
+		panic("NULL values not implemented")
+	default:
+		panic("unknown join type")
+	}
+
+	return output
+}
+
+// Limit returns a Relationer with a maximum of rowCount rows, starting from startRowIndex
+func (r Relation) Limit(startRowIndex, rowCount int) Relationer {
+	output := Relation{Name: r.Name, Columns: []Column{}}
+
+	for _, col := range r.Columns {
+		newCol := NewColumn(col.Signature)
+
+		for i := 0; i < rowCount && startRowIndex+i < col.GetNumRows(); i++ {
+			value, _ := col.GetRow(i)
+			newCol.AddRow(col.Signature.Type, value)
+		}
+
+		output.Columns = append(output.Columns, newCol)
+	}
+
+	return output
+}
+
+// GroupBy returns a Relationer grouped by the given column
+func (r Relation) GroupBy(groupColumn AttrInfo) Relationer {
+	output := Relation{Name: r.Name, Columns: []Column{}}
+
+	var sourceCol *Column
+	var destCol *Column
+
+	for colIndex, column := range r.Columns {
+		modSig := column.Signature
+
+		if modSig.Flags&GROUPED != 0 {
+			panic("cannot group an already grouped relation")
+		}
+
+		if modSig == groupColumn {
+			sourceCol = &r.Columns[colIndex]
+			output.Columns = append(output.Columns, NewColumn(modSig))
+			destCol = &output.Columns[colIndex]
+		} else {
+			modSig.Flags = modSig.Flags | GROUPED
+			output.Columns = append(output.Columns, NewColumn(modSig))
+		}
+	}
+
+	var groupedIndices [][]int
+	maxRows := sourceCol.GetNumRows()
+
+	switch sourceCol.Signature.Type {
+	case INT:
+		hash := map[int][]int{}
+
+		for index := 0; index < maxRows; index++ {
+			value, err := sourceCol.GetRow(index)
+			if err != nil {
+				panic(err)
+			}
+			hash[value.(int)] = append(hash[value.(int)], index)
+		}
+
+		for value, indices := range hash {
+			groupedIndices = append(groupedIndices, indices)
+			destCol.AddRow(sourceCol.Signature.Type, value)
+		}
+	case STRING:
+		hash := map[string][]int{}
+
+		for index := 0; index < maxRows; index++ {
+			value, err := sourceCol.GetRow(index)
+			if err != nil {
+				panic(err)
+			}
+			hash[value.(string)] = append(hash[value.(string)], index)
+		}
+
+		for value, indices := range hash {
+			groupedIndices = append(groupedIndices, indices)
+			destCol.AddRow(sourceCol.Signature.Type, value)
+		}
+	case FLOAT:
+		hash := map[float64][]int{}
+
+		for index := 0; index < maxRows; index++ {
+			value, err := sourceCol.GetRow(index)
+			if err != nil {
+				panic(err)
+			}
+			hash[value.(float64)] = append(hash[value.(float64)], index)
+		}
+
+		for value, indices := range hash {
+			groupedIndices = append(groupedIndices, indices)
+			destCol.AddRow(sourceCol.Signature.Type, value)
+		}
+	default:
+		panic("unknown type")
+	}
+
+	for colIndex := range output.Columns {
+		dest := &output.Columns[colIndex]
+		source := &r.Columns[colIndex]
+		if dest.GetNumRows() > 0 {
+			continue
+		}
+
+		switch source.Signature.Type {
+		case INT:
+			for _, group := range groupedIndices {
+				groupValues := []int{}
+
+				for _, row := range group {
+					value, _ := source.GetRow(row)
+					groupValues = append(groupValues, value.(int))
+				}
+
+				dest.AddRow(INT, groupValues)
+			}
+		case STRING:
+			for _, group := range groupedIndices {
+				groupValues := []string{}
+
+				for _, row := range group {
+					value, _ := source.GetRow(row)
+					groupValues = append(groupValues, value.(string))
+				}
+
+				dest.AddRow(STRING, groupValues)
+			}
+		case FLOAT:
+			for _, group := range groupedIndices {
+				groupValues := []float64{}
+
+				for _, row := range group {
+					value, _ := source.GetRow(row)
+					groupValues = append(groupValues, value.(float64))
+				}
+
+				dest.AddRow(FLOAT, groupValues)
+			}
+		}
+	}
+
+	return output
 }
 
 // Aggregate should implement the grouping and aggregation of columns.
@@ -335,7 +685,137 @@ func (r Relation) HashJoin(col1 []AttrInfo, rightRelation Relationer, col2 []Att
 // aggregate defines the column on which the aggrFunc should be applied.
 // currently not implemented
 func (r Relation) Aggregate(aggregate AttrInfo, aggrFunc AggrFunc) Relationer {
-	return nil
+	output := Relation{Name: r.Name, Columns: []Column{}}
+
+	var aggrSourceCol *Column
+	var aggrDestCol *Column
+
+	copyColumn := func(source *Column, dest *Column) {
+		for i := 0; i < source.GetNumRows(); i++ {
+			value, _ := source.GetRow(i)
+			dest.AddRow(source.Signature.Type, value)
+		}
+	}
+
+	for colIndex, col := range r.Columns {
+
+		if col.Signature == aggregate {
+			sig := col.Signature
+			sig.Flags &^= GROUPED
+			if aggrFunc == COUNT {
+				sig.Type = INT
+			}
+
+			output.Columns = append(output.Columns, NewColumn(sig))
+
+			aggrSourceCol = &r.Columns[colIndex]
+			aggrDestCol = &output.Columns[colIndex]
+		} else {
+			output.Columns = append(output.Columns, NewColumn(col.Signature))
+			copyColumn(&r.Columns[colIndex], &output.Columns[colIndex])
+		}
+	}
+
+	if aggrSourceCol == nil || aggrDestCol == nil {
+		panic("invalid column specified")
+	}
+
+	for i := 0; i < aggrSourceCol.GetNumRows(); i++ {
+		sourceValue, _ := aggrSourceCol.GetRow(i)
+
+		switch aggrSourceCol.Signature.Type {
+		case INT:
+			groupValue, _ := sourceValue.([]int)
+			aggrValue := groupValue[0]
+
+			switch aggrFunc {
+			case SUM:
+				for j := 1; i < len(groupValue); j++ {
+					aggrValue += groupValue[j]
+				}
+
+			case COUNT:
+				aggrValue = len(groupValue)
+
+			case MIN:
+				for j := 1; j < len(groupValue); j++ {
+					if groupValue[j] < aggrValue {
+						aggrValue = groupValue[j]
+					}
+				}
+
+			case MAX:
+				for j := 1; j < len(groupValue); j++ {
+					if groupValue[j] > aggrValue {
+						aggrValue = groupValue[j]
+					}
+				}
+			}
+			aggrDestCol.AddRow(INT, aggrValue)
+
+		case FLOAT:
+			groupValue, _ := sourceValue.([]float64)
+			aggrValue := groupValue[0]
+
+			switch aggrFunc {
+			case SUM:
+				for j := 1; j < len(groupValue); j++ {
+					aggrValue += groupValue[j]
+				}
+
+			case COUNT:
+				count := len(groupValue)
+				aggrDestCol.AddRow(INT, count)
+				continue
+
+			case MIN:
+				for j := 1; j < len(groupValue); j++ {
+					if groupValue[j] < aggrValue {
+						aggrValue = groupValue[j]
+					}
+				}
+
+			case MAX:
+				for j := 1; j < len(groupValue); j++ {
+					if groupValue[j] > aggrValue {
+						aggrValue = groupValue[j]
+					}
+				}
+			}
+			aggrDestCol.AddRow(FLOAT, aggrValue)
+
+		case STRING:
+			groupValue := sourceValue.([]string)
+			aggrValue := groupValue[0]
+
+			switch aggrFunc {
+			case SUM:
+				panic("sum is not supported for strings")
+
+			case COUNT:
+				count := len(groupValue)
+				aggrDestCol.AddRow(INT, count)
+				continue
+
+			case MIN:
+				for j := 1; j < len(groupValue); j++ {
+					if strings.Compare(groupValue[j], aggrValue) < 0 {
+						aggrValue = groupValue[j]
+					}
+				}
+
+			case MAX:
+				for j := 1; j < len(groupValue); j++ {
+					if strings.Compare(groupValue[j], aggrValue) > 0 {
+						aggrValue = groupValue[j]
+					}
+				}
+			}
+			aggrDestCol.AddRow(STRING, aggrValue)
+		}
+	}
+
+	return output
 }
 
 // SortOrder is an enumeration type for all supported sorting modes
@@ -432,7 +912,7 @@ func (r Relation) MergeSort(columns []AttrInfo, sortOrder SortOrder) Relationer 
 		}
 
 		// init output Relation
-		output.Name = r.Name + "(sorted)"
+		output.Name = r.Name
 		output.Columns = []Column{}
 
 		for _, col := range r.Columns {

@@ -11,17 +11,23 @@ type RLEDataEntry struct {
 // RLEDataStore is a run length encoded DataStore
 type RLEDataStore struct {
 	DataType DataTypes
+	Flags    ColumnFlags
 	Entries  []RLEDataEntry
 }
 
 // NewRLEDataStore creates a new RLEDataStore
-func NewRLEDataStore(dataType DataTypes) DataStore {
-	return &RLEDataStore{dataType, []RLEDataEntry{}}
+func NewRLEDataStore(dataType DataTypes, flags ColumnFlags) DataStore {
+	return &RLEDataStore{dataType, flags, []RLEDataEntry{}}
 }
 
 // GetDataType returns the type of the stored data.
 func (ds RLEDataStore) GetDataType() DataTypes {
 	return ds.DataType
+}
+
+// GetFlags returns the flags for the stored data
+func (ds RLEDataStore) GetFlags() ColumnFlags {
+	return ds.Flags
 }
 
 // AddRow adds a new row to the column.
@@ -31,16 +37,31 @@ func (ds *RLEDataStore) AddRow(typ DataTypes, value interface{}) (int, error) {
 	}
 
 	// check if value is of the right type
-	wrongValue := false
-	switch typ {
-	case INT:
-		wrongValue = value.(int)*0 == 1
-	case FLOAT:
-		wrongValue = value.(float64)*0.0 == 1.0
-	case STRING:
-		wrongValue = value.(string)+"+" == value
+	rightType := false
+
+	switch {
+	case ds.Flags == 0:
+		switch typ {
+		case INT:
+			_, rightType = value.(int)
+		case FLOAT:
+			_, rightType = value.(float64)
+		case STRING:
+			_, rightType = value.(string)
+		}
+	case ds.Flags&GROUPED == GROUPED && ds.Flags&NULLABLE == 0:
+		switch typ {
+		case INT:
+			_, rightType = value.([]int)
+		case FLOAT:
+			_, rightType = value.([]float64)
+		case STRING:
+			_, rightType = value.([]string)
+		}
 	}
-	if wrongValue {
+
+	if !rightType {
+		return -1, errors.New("type mismatch")
 	}
 
 	if len(ds.Entries) > 0 {
