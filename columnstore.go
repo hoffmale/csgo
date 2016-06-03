@@ -2,7 +2,7 @@ package csgo
 
 // CreateRelation creates a new relation within the column store and returns
 // an object reference.
-func (c ColumnStore) CreateRelation(tabName string, sig []AttrInfo) Relationer {
+func (c *ColumnStore) CreateRelation(tabName string, sig []AttrInfo) Relationer {
 	if c.Relations == nil {
 		c.Relations = make(map[string]Relationer)
 	}

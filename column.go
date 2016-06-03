@@ -11,13 +11,13 @@ func NewColumn(sig AttrInfo) Column {
 
 	switch sig.Enc {
 	case NOCOMP:
-		col.Data = NewBasicDataStore(sig.Type)
+		col.Data = NewBasicDataStore(sig.Type, sig.Flags)
 	case RLE:
-		col.Data = NewRLEDataStore(sig.Type)
+		col.Data = NewRLEDataStore(sig.Type, sig.Flags)
 	case DICT:
-		col.Data = NewDictEncodedDataStore(sig.Type, NOCOMP)
+		col.Data = NewDictEncodedDataStore(sig.Type, sig.Flags, NOCOMP)
 	default:
-		col.Data = NewBasicDataStore(sig.Type)
+		col.Data = NewBasicDataStore(sig.Type, sig.Flags)
 	}
 	return col
 }
@@ -26,18 +26,36 @@ func NewColumn(sig AttrInfo) Column {
 func NewColumnWithData(sig AttrInfo, data interface{}) Column {
 	col := NewColumn(sig)
 
-	switch sig.Type {
-	case INT:
-		for _, val := range data.([]int) {
-			col.AddRow(INT, val)
+	switch {
+	case sig.Flags == 0:
+		switch sig.Type {
+		case INT:
+			for _, val := range data.([]int) {
+				col.AddRow(INT, val)
+			}
+		case FLOAT:
+			for _, val := range data.([]float64) {
+				col.AddRow(FLOAT, val)
+			}
+		case STRING:
+			for _, val := range data.([]string) {
+				col.AddRow(STRING, val)
+			}
 		}
-	case FLOAT:
-		for _, val := range data.([]float64) {
-			col.AddRow(FLOAT, val)
-		}
-	case STRING:
-		for _, val := range data.([]string) {
-			col.AddRow(STRING, val)
+	case sig.Flags&GROUPED == GROUPED && sig.Flags&NULLABLE == 0:
+		switch sig.Type {
+		case INT:
+			for _, val := range data.([][]int) {
+				col.AddRow(INT, val)
+			}
+		case FLOAT:
+			for _, val := range data.([][]float64) {
+				col.AddRow(FLOAT, val)
+			}
+		case STRING:
+			for _, val := range data.([][]string) {
+				col.AddRow(STRING, val)
+			}
 		}
 	}
 	return col
@@ -119,19 +137,4 @@ func (col Column) GetRawData() interface{} {
 	}
 
 	panic("unknown data type")
-}
-
-func Seem(sigs1 []AttrInfo, sigs2 []AttrInfo) (int, int) {
-	var left, right int
-
-	for i := 0; i < len(sigs1); i++ {
-		for j := 0; j < len(sigs2); j++ {
-			if sigs1[i] == sigs2[j] {
-				left = i
-				right = j
-			}
-		}
-	}
-
-	return (left, right)
 }

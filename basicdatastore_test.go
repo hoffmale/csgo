@@ -4,9 +4,9 @@ import "testing"
 
 func createCases() []BasicDataStore {
 	return []BasicDataStore{
-		{INT, []int{1, 2, 3}},
-		{FLOAT, []float64{3.1, 2.2, 1.3}},
-		{STRING, []string{"test1", "arg2", "test3"}},
+		{INT, 0, []interface{}{int(1), int(2), int(3)}},
+		{FLOAT, 0, []interface{}{float64(3.1), float64(2.2), float64(1.3)}},
+		{STRING, 0, []interface{}{"test1", "arg2", "test3"}},
 	}
 }
 

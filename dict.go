@@ -5,24 +5,25 @@ import "errors"
 // DictEncodedDataStore is a DataStore apllying dictionary encoding
 type DictEncodedDataStore struct {
 	DataType   DataTypes
+	Flags      ColumnFlags
 	Dictionary map[int]interface{}
 
 	Data DataStore
 }
 
 // NewDictEncodedDataStore creates a new DictEncodedDataStore.
-func NewDictEncodedDataStore(typ DataTypes, internalDataStoreType Compression) DataStore {
-	ds := &DictEncodedDataStore{DataType: typ, Dictionary: map[int]interface{}{}}
+func NewDictEncodedDataStore(typ DataTypes, flags ColumnFlags, internalDataStoreType Compression) DataStore {
+	ds := &DictEncodedDataStore{DataType: typ, Flags: flags, Dictionary: map[int]interface{}{}}
 	switch internalDataStoreType {
 	case NOCOMP:
-		ds.Data = NewBasicDataStore(INT)
+		ds.Data = NewBasicDataStore(INT, 0)
 	case RLE:
-		ds.Data = NewRLEDataStore(INT)
+		ds.Data = NewRLEDataStore(INT, 0)
 	case DICT:
 		// prevent unnecessary looping
-		ds.Data = NewBasicDataStore(INT)
+		ds.Data = NewBasicDataStore(INT, 0)
 	default:
-		ds.Data = NewBasicDataStore(INT)
+		ds.Data = NewBasicDataStore(INT, 0)
 	}
 	return ds
 }
@@ -32,28 +33,45 @@ func (ds *DictEncodedDataStore) GetDataType() DataTypes {
 	return ds.DataType
 }
 
+// GetFlags returns the flags for the stored data
+func (ds DictEncodedDataStore) GetFlags() ColumnFlags {
+	return ds.Flags
+}
+
 // AddRow adds a new row to the column.
 func (ds *DictEncodedDataStore) AddRow(typ DataTypes, value interface{}) (int, error) {
 	if typ != ds.DataType {
 		return -1, errors.New("invalid type")
 	}
 
-	// check if value is of the right type (HACK BEGIN)
-	wrongValue := false
-	switch typ {
-	case INT:
-		wrongValue = value.(int)*0 == 1
-	case FLOAT:
-		wrongValue = value.(float64)*0.0 == 1.0
-	case STRING:
-		wrongValue = value.(string)+"+" == value
-	}
-	if wrongValue {
-		panic("wrong data type")
-	}
-	// HACK END
+	// check if value is of the right type
+	rightType := false
 
-	// TODO: XXX BEGIN XXX
+	switch {
+	case ds.Flags == 0:
+		switch typ {
+		case INT:
+			_, rightType = value.(int)
+		case FLOAT:
+			_, rightType = value.(float64)
+		case STRING:
+			_, rightType = value.(string)
+		}
+	case ds.Flags&GROUPED == GROUPED && ds.Flags&NULLABLE == 0:
+		switch typ {
+		case INT:
+			_, rightType = value.([]int)
+		case FLOAT:
+			_, rightType = value.([]float64)
+		case STRING:
+			_, rightType = value.([]string)
+		}
+	}
+
+	if !rightType {
+		return -1, errors.New("type mismatch")
+	}
+
 	// looking up for matching value in the Hashtable
 	index := -1
 	for k, v := range ds.Dictionary {
@@ -73,7 +91,6 @@ func (ds *DictEncodedDataStore) AddRow(typ DataTypes, value interface{}) (int, e
 	// add the index of the value to the column (the index of the value not the value)
 	ds.Data.AddRow(INT, index)           // = append(Data, index)
 	return ds.Data.GetNumRows() - 1, nil //len(Data) - 1, nil
-	// XXX END XXX
 }
 
 // GetRow returns the value at the indicated row. If that value can not be found, an error is returned.

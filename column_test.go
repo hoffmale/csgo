@@ -71,7 +71,7 @@ func TestColumnAddRow(t *testing.T) {
 			} else {
 				if testcase.shouldFail {
 					t.Fail()
-					t.Errorf("testcase %d unexpectedly succeeded", testcaseID)
+					t.Errorf("testcase %d (enc: %d) unexpectedly succeeded", testcaseID, encoding)
 				} else {
 					if index != testcase.expectedIndex {
 						t.Fail()
