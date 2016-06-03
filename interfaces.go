@@ -85,14 +85,19 @@ const (
 	STRING
 )
 
-// ColumnFlags is enumeration of all supported column flags
-type ColumnFlags int
+// ColumnFlags is a bit field for various column flags
+type ColumnFlags byte
 
 const (
-	// NULLABLE indicates that there can be NULL values in this column
-	NULLABLE = 0x1
-	// GROUPED indicates that values in this column are grouped
-	GROUPED = 0x2
+	// NOFLAGS means there is no flag set for the column
+	NOFLAGS = 0x00
+	// NULLABLE means the column can hold NULL values
+	NULLABLE = 0x01
+	// GROUPED means the column consists of grouped elements
+	GROUPED = 0x02
+	// NULLGROUP is the combination of NULLABLE and GROUPED
+	NULLGROUP = NULLABLE | GROUPED
+	// Space for another six flags (e.g. index/primary key/search structures)
 )
 
 // AttrInfo contains meta information about a column (name and type).

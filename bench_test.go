@@ -174,3 +174,105 @@ func BenchmarkComplexSelect_HashJoin(b *testing.B) {
 			EQ)
 	}
 }
+
+func BenchmarkComplexSelect_MergeHashJoin(b *testing.B) {
+	cs := ColumnStore{}
+	tblPartSupp := cs.CreateRelation("PARTSUPP", []AttrInfo{
+		{Name: "PARTKEY", Type: INT, Enc: NOCOMP},
+		{Name: "SUPPKEY", Type: INT, Enc: NOCOMP},
+		{Name: "AVAILQTY", Type: INT, Enc: NOCOMP},
+		{Name: "SUPPLYCOST", Type: FLOAT, Enc: NOCOMP},
+		{Name: "COMMENT", Type: STRING, Enc: NOCOMP},
+	})
+	tblSupplier := cs.CreateRelation("SUPPLIER", []AttrInfo{
+		{"SUPPKEY", INT, NOCOMP, 0},
+		{"NAME", STRING, NOCOMP, 0},
+		{"ADDRESS", STRING, NOCOMP, 0},
+		{"NATIONKEY", INT, NOCOMP, 0},
+		{"PHONE", STRING, NOCOMP, 0},
+		{"ACCTBAL", FLOAT, NOCOMP, 0},
+		{"COMMENT", STRING, NOCOMP, 0},
+	})
+	tblPart := cs.CreateRelation("PART", []AttrInfo{
+		{"PARTKEY", INT, NOCOMP, 0},
+		{"NAME", STRING, NOCOMP, 0},
+		{"MFGR", STRING, NOCOMP, 0},
+		{"BRAND", STRING, NOCOMP, 0},
+		{"TYPE", STRING, NOCOMP, 0},
+		{"SIZE", INT, NOCOMP, 0},
+		{"CONTAINER", STRING, NOCOMP, 0},
+		{"RETAILPRICE", FLOAT, NOCOMP, 0},
+		{"COMMENT", STRING, NOCOMP, 0},
+	}).(Relation)
+
+	tblPartSupp.Load("partsupp.tbl", '|')
+	tblSupplier.Load("supplier.tbl", '|')
+	tblPart.Load("part.tbl", '|')
+
+	b.ResetTimer()
+
+	for benchLoop := 0; benchLoop < b.N; benchLoop++ {
+		tblPart.MergeJoin(
+			[]AttrInfo{{"PARTKEY", INT, NOCOMP, 0}},
+			tblPartSupp.HashJoin(
+				[]AttrInfo{{"SUPPKEY", INT, NOCOMP, 0}},
+				tblSupplier.Scan([]AttrInfo{{"SUPPKEY", INT, NOCOMP, 0}, {"ACCTBAL", FLOAT, NOCOMP, 0}}).Select(AttrInfo{"ACCTBAL", FLOAT, NOCOMP, 0}, LT, float64(0.0)).(Relation).Limit(0, 10),
+				[]AttrInfo{{"SUPPKEY", INT, NOCOMP, 0}},
+				INNER,
+				EQ).Scan([]AttrInfo{{"PARTSUPP.PARTKEY", INT, NOCOMP, 0}}),
+			[]AttrInfo{{"PARTSUPP.PARTKEY", INT, NOCOMP, 0}},
+			INNER,
+			EQ)
+	}
+}
+
+func BenchmarkComplexSelect_HashMergeJoin(b *testing.B) {
+	cs := ColumnStore{}
+	tblPartSupp := cs.CreateRelation("PARTSUPP", []AttrInfo{
+		{Name: "PARTKEY", Type: INT, Enc: NOCOMP},
+		{Name: "SUPPKEY", Type: INT, Enc: NOCOMP},
+		{Name: "AVAILQTY", Type: INT, Enc: NOCOMP},
+		{Name: "SUPPLYCOST", Type: FLOAT, Enc: NOCOMP},
+		{Name: "COMMENT", Type: STRING, Enc: NOCOMP},
+	}).(Relation)
+	tblSupplier := cs.CreateRelation("SUPPLIER", []AttrInfo{
+		{"SUPPKEY", INT, NOCOMP, 0},
+		{"NAME", STRING, NOCOMP, 0},
+		{"ADDRESS", STRING, NOCOMP, 0},
+		{"NATIONKEY", INT, NOCOMP, 0},
+		{"PHONE", STRING, NOCOMP, 0},
+		{"ACCTBAL", FLOAT, NOCOMP, 0},
+		{"COMMENT", STRING, NOCOMP, 0},
+	})
+	tblPart := cs.CreateRelation("PART", []AttrInfo{
+		{"PARTKEY", INT, NOCOMP, 0},
+		{"NAME", STRING, NOCOMP, 0},
+		{"MFGR", STRING, NOCOMP, 0},
+		{"BRAND", STRING, NOCOMP, 0},
+		{"TYPE", STRING, NOCOMP, 0},
+		{"SIZE", INT, NOCOMP, 0},
+		{"CONTAINER", STRING, NOCOMP, 0},
+		{"RETAILPRICE", FLOAT, NOCOMP, 0},
+		{"COMMENT", STRING, NOCOMP, 0},
+	})
+
+	tblPartSupp.Load("partsupp.tbl", '|')
+	tblSupplier.Load("supplier.tbl", '|')
+	tblPart.Load("part.tbl", '|')
+
+	b.ResetTimer()
+
+	for benchLoop := 0; benchLoop < b.N; benchLoop++ {
+		tblPart.HashJoin(
+			[]AttrInfo{{"PARTKEY", INT, NOCOMP, 0}},
+			tblPartSupp.MergeJoin(
+				[]AttrInfo{{"SUPPKEY", INT, NOCOMP, 0}},
+				tblSupplier.Scan([]AttrInfo{{"SUPPKEY", INT, NOCOMP, 0}, {"ACCTBAL", FLOAT, NOCOMP, 0}}).Select(AttrInfo{"ACCTBAL", FLOAT, NOCOMP, 0}, LT, float64(0.0)).(Relation).Limit(0, 10),
+				[]AttrInfo{{"SUPPKEY", INT, NOCOMP, 0}},
+				INNER,
+				EQ).Scan([]AttrInfo{{"PARTSUPP.PARTKEY", INT, NOCOMP, 0}}),
+			[]AttrInfo{{"PARTSUPP.PARTKEY", INT, NOCOMP, 0}},
+			INNER,
+			EQ)
+	}
+}
