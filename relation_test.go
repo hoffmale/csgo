@@ -239,7 +239,331 @@ func TestRelationGetRawData(t *testing.T) {
 	}
 }
 
+func TestRelationHashJoin(t *testing.T) {
+	cases := []struct {
+		left      Relation
+		right     Relation
+		leftCols  []AttrInfo
+		rightCols []AttrInfo
+		output    Relation
+		joinType  JoinType
+		compType  Comparison
+	}{
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP, 0}, []int{1, 2, 3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP, 0}, []int{2, 3, 4})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP, 0}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP, 0}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP, 0}, []int{2, 3}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP, 0}, []int{2, 3}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", FLOAT, NOCOMP, 0}, []float64{0.0, 0.1, 0.2, 0.3})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", FLOAT, NOCOMP, 0}, []float64{0.0, 0.2, 0.4, 0.6})}},
+			leftCols:  []AttrInfo{{"leftCol1", FLOAT, NOCOMP, 0}},
+			rightCols: []AttrInfo{{"rightCol1", FLOAT, NOCOMP, 0}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", FLOAT, NOCOMP, 0}, []float64{0.0, 0.2}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", FLOAT, NOCOMP, 0}, []float64{0.0, 0.2}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", STRING, NOCOMP, 0}, []string{"a", "aa", "b", "bb", "c", "cc"})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", STRING, NOCOMP, 0}, []string{"a", "ab", "b", "bb", "c", "cb"})}},
+			leftCols:  []AttrInfo{{"leftCol1", STRING, NOCOMP, 0}},
+			rightCols: []AttrInfo{{"rightCol1", STRING, NOCOMP, 0}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", STRING, NOCOMP, 0}, []string{"a", "b", "bb", "c"}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", STRING, NOCOMP, 0}, []string{"a", "b", "bb", "c"}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left: Relation{
+				Name: "left",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP, 0}, []int{1, 1, 2, 2, 3, 3, 4, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"leftCol2", INT, NOCOMP, 0}, []int{1, 2, 1, 2, 1, 2, 1, 2, 1, 2}),
+				},
+			},
+			right: Relation{
+				Name: "right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP, 0}, []int{1, 2, 3, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"rightCol2", INT, NOCOMP, 0}, []int{1, 2, 1, 2, 1, 2}),
+				},
+			},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP, 0}, {"leftCol2", INT, NOCOMP, 0}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP, 0}, {"rightCol2", INT, NOCOMP, 0}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP, 0}, []int{1, 2, 3, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"left.leftCol2", INT, NOCOMP, 0}, []int{1, 2, 1, 2, 1, 2}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP, 0}, []int{1, 2, 3, 4, 5, 5}),
+					NewColumnWithData(AttrInfo{"right.rightCol2", INT, NOCOMP, 0}, []int{1, 2, 1, 2, 1, 2}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left: Relation{
+				Name: "left",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP, 0}, []int{1, 1, 3, 5}),
+				},
+			},
+			right: Relation{
+				Name: "right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP, 0}, []int{1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 6}),
+				},
+			},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP, 0}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP, 0}},
+			output: Relation{
+				Name: "left x right",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP, 0}, []int{1, 1, 3, 5, 1, 1, 3, 5}),
+					NewColumnWithData(AttrInfo{"right.rightCol1", INT, NOCOMP, 0}, []int{1, 1, 3, 5, 1, 1, 3, 5}),
+				},
+			},
+			joinType: INNER,
+			compType: EQ,
+		},
+		{
+			left:      Relation{Name: "left", Columns: []Column{NewColumnWithData(AttrInfo{"leftCol1", INT, NOCOMP, 0}, []int{1, 2, 3, 4, 5})}},
+			right:     Relation{Name: "right", Columns: []Column{NewColumnWithData(AttrInfo{"rightCol1", INT, NOCOMP, 0}, []int{1, 1, 2, 2, 4, 5})}},
+			leftCols:  []AttrInfo{{"leftCol1", INT, NOCOMP, 0}},
+			rightCols: []AttrInfo{{"rightCol1", INT, NOCOMP, 0}},
+			output: Relation{
+				Name: "left (x right)",
+				Columns: []Column{
+					NewColumnWithData(AttrInfo{"left.leftCol1", INT, NOCOMP, 0}, []int{1, 2, 4, 5}),
+				},
+			},
+			joinType: SEMI,
+			compType: EQ,
+		},
+	}
+
+	for testCaseID, testCase := range cases {
+		output := testCase.left.HashJoin(testCase.leftCols, testCase.right, testCase.rightCols, testCase.joinType, testCase.compType)
+
+		if !reflect.DeepEqual(output, testCase.output) {
+			t.Fail()
+			t.Errorf("test case %d failed", testCaseID)
+			output.Print()
+			testCase.output.Print()
+		}
+	}
+}
+
+func TestRelationGroupBy(t *testing.T) {
+	cases := []struct {
+		input       Relation
+		output      Relation
+		columnIndex int
+		shouldFail  bool
+	}{
+		{
+			input: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, 0}, []float64{123.45, 78.5, -455.0, 999.87, 35.02, 133.73}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt", "Erfurt", "Ilmenau", "Ilmenau", "Erfurt"}),
+			}},
+			output: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, GROUPED}, [][]float64{[]float64{123.45, 999.87, 35.02}, []float64{78.5, -455.0, 133.73}}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			columnIndex: 1,
+			shouldFail:  false,
+		},
+	}
+
+	for testCaseID, testCase := range cases {
+		output := testCase.input.GroupBy(testCase.input.Columns[testCase.columnIndex].Signature).(Relation)
+
+		if !reflect.DeepEqual(output, testCase.output) {
+			t.Logf("test case %d: reflect mismatch, trying manual comparison", testCaseID)
+
+			fail := false
+		loop:
+			for i := 0; i < testCase.output.Columns[testCase.columnIndex].GetNumRows(); i++ {
+				testValue, _ := testCase.output.Columns[testCase.columnIndex].GetRow(i)
+
+				testRowIndex := -1
+				for j := 0; j < output.Columns[testCase.columnIndex].GetNumRows(); j++ {
+					testRowValue, _ := output.Columns[testCase.columnIndex].GetRow(j)
+
+					if testValue == testRowValue {
+						testRowIndex = j
+						break
+					}
+				}
+
+				if testRowIndex == -1 {
+					fail = true
+					break loop
+				}
+
+				for colIndex := 0; colIndex < len(testCase.output.Columns); colIndex++ {
+					value1, _ := testCase.output.Columns[colIndex].GetRow(i)
+					value2, _ := output.Columns[colIndex].GetRow(testRowIndex)
+
+					if !reflect.DeepEqual(value1, value2) {
+						fail = true
+						break loop
+					}
+				}
+			}
+
+			if fail && !testCase.shouldFail {
+				t.Fail()
+			}
+		} else {
+			if testCase.shouldFail {
+				t.Fail()
+			}
+		}
+	}
+}
+
+func TestRelationAggregate(t *testing.T) {
+	cases := []struct {
+		input       Relation
+		output      Relation
+		columnIndex int
+		aggrFunc    AggrFunc
+		shouldFail  bool
+	}{
+		{
+			input: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, GROUPED}, [][]float64{[]float64{123.45, 999.87, 35.02}, []float64{78.5, -455.0, 133.73}}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			output: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, 0}, []float64{123.45 + 999.87 + 35.02, 78.5 - 455.0 + 133.73}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			columnIndex: 0,
+			aggrFunc:    SUM,
+			shouldFail:  false,
+		},
+		{
+			input: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, GROUPED}, [][]float64{[]float64{123.45, 999.87, 35.02}, []float64{78.5, -455.0, 133.73}}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			output: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", INT, NOCOMP, 0}, []int{3, 3}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			columnIndex: 0,
+			aggrFunc:    COUNT,
+			shouldFail:  false,
+		},
+		{
+			input: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, GROUPED}, [][]float64{[]float64{123.45, 999.87, 35.02}, []float64{78.5, -455.0, 133.73}}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			output: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, 0}, []float64{35.02, -455.0}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			columnIndex: 0,
+			aggrFunc:    MIN,
+			shouldFail:  false,
+		},
+		{
+			input: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, GROUPED}, [][]float64{[]float64{123.45, 999.87, 35.02}, []float64{78.5, -455.0, 133.73}}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			output: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"ERTRAG", FLOAT, NOCOMP, 0}, []float64{999.87, 133.73}),
+				NewColumnWithData(AttrInfo{"FILIALE", STRING, NOCOMP, 0}, []string{"Ilmenau", "Erfurt"}),
+			}},
+			columnIndex: 0,
+			aggrFunc:    MAX,
+			shouldFail:  false,
+		},
+	}
+
+	for testCaseID, testCase := range cases {
+		output := testCase.input.Aggregate(testCase.input.Columns[testCase.columnIndex].Signature, testCase.aggrFunc).(Relation)
+
+		if !reflect.DeepEqual(output, testCase.output) {
+			if !testCase.shouldFail {
+				t.Fail()
+				t.Errorf("test case %d failed\n", testCaseID)
+			}
+		} else {
+			if testCase.shouldFail {
+				t.Fail()
+				t.Errorf("test case %d unexpectedly succeeded\n", testCaseID)
+			}
+		}
+	}
+}
+
 func TestRelationMergeSort(t *testing.T) {
+	cases := []struct {
+		input     Relation
+		output    Relation
+		sortOrder SortOrder
+		cols      []AttrInfo
+	}{
+		{
+			input: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"intCol1", INT, NOCOMP, 0}, []int{1, 3, 2, 4, 6, 5}),
+			}},
+			output: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"intCol1", INT, NOCOMP, 0}, []int{1, 2, 3, 4, 5, 6}),
+			}},
+			sortOrder: ASC,
+			cols:      []AttrInfo{{"intCol1", INT, NOCOMP, 0}},
+		},
+		{
+			input: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"intCol1", INT, NOCOMP, 0}, []int{1, 3, 2, 4, 6, 5}),
+			}},
+			output: Relation{Name: "testInput", Columns: []Column{
+				NewColumnWithData(AttrInfo{"intCol1", INT, NOCOMP, 0}, []int{6, 5, 4, 3, 2, 1}),
+			}},
+			sortOrder: DESC,
+			cols:      []AttrInfo{{"intCol1", INT, NOCOMP, 0}},
+		},
+	}
+
+	for testCaseID, testCase := range cases {
+		output := testCase.input.MergeSort(testCase.cols, testCase.sortOrder).(Relation)
+
+		if !reflect.DeepEqual(output, testCase.output) {
+			t.Fail()
+			t.Errorf("test case %d failed", testCaseID)
+		}
+	}
+}
+
+func TestRelationMergeJoin(t *testing.T) {
 	cases := []struct {
 		left      Relation
 		right     Relation
@@ -446,8 +770,6 @@ func TestRelationMergeSort(t *testing.T) {
 
 	for _, testCase := range cases {
 		output := testCase.left.MergeJoin(testCase.leftCols, testCase.right, testCase.rightCols, testCase.joinType, testCase.compType)
-
-		output.Print()
 
 		if !reflect.DeepEqual(output, testCase.output) {
 			t.Fail()
