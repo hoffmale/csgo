@@ -151,15 +151,38 @@ func (r Relation) Select(col AttrInfo, comp Comparison, compVal interface{}) Rel
 // Print should output the relation to the standard output in record
 // representation.
 func (r Relation) Print() {
+	// change these constants for fancier output
+	const (
+		TopLeftCorner     = "+" // "\xE2\x95\x94"
+		TopRightCorner    = "+" // "\xE2\x95\x97"
+		BottomLeftCorner  = "+" // "\xE2\x95\x9A"
+		BottomRightCorner = "+" // "\xE2\x95\x9D"
+		LeftBorderCross   = "+" // "\xE2\x95\x9F"
+		LeftHeaderCross   = "+" // "\xE2\x95\xA0"
+		RightBorderCross  = "+" // "\xE2\x95\xA2"
+		RightHeaderCross  = "+" // "\xE2\x95\xA3"
+		TopBorderCross    = "+" // "\xE2\x95\xA4"
+		BottomBorderCross = "+" // "\xE2\x95\xA7"
+		MiddleBorderCross = "+" // "\xE2\x94\xBC"
+		LeftOuterBorder   = "|" // "\xE2\x95\x91"
+		RightOuterBorder  = "|" // "\xE2\x95\x91"
+		VerticalBorder    = "|" // "\xE2\x94\x82"
+		TopOuterBorder    = "=" // "\xE2\x95\x90"
+		BottomOuterBorder = "=" // "\xE2\x95\x90"
+		HorizontalBorder  = "-" // "\xE2\x94\x80"
+	)
+
 	type previewColumn struct {
 		name      string
 		rows      []string
 		maxLength int
 		alignLeft bool
+		lineAfter []int
 	}
 
-	generatePreview := func() []previewColumn {
+	generatePreview := func() ([]previewColumn, bool) {
 		preview := []previewColumn{}
+		isGrouped := false
 
 		for _, col := range r.Columns {
 			curPreview := previewColumn{
@@ -167,9 +190,110 @@ func (r Relation) Print() {
 				maxLength: len(col.Signature.Name),
 				alignLeft: col.Signature.Type == STRING,
 				rows:      []string{},
+				lineAfter: []int{},
 			}
 
 			preview = append(preview, curPreview)
+
+			isGrouped = isGrouped || col.Signature.Flags&GROUPED != 0
+		}
+
+		return preview, isGrouped
+	}
+
+	fillGroupedPreview := func(preview []previewColumn, startIndex int, endIndex int) []previewColumn {
+		for index, col := range r.Columns {
+			curPreview := &preview[index]
+			for rowIndex := startIndex; rowIndex < endIndex && rowIndex < col.GetNumRows(); rowIndex++ {
+				value, _ := col.GetRow(rowIndex)
+
+				if col.Signature.Flags&GROUPED != NOFLAGS {
+					switch col.Signature.Type {
+					case INT:
+						groupData := value.([]int)
+
+						for _, entry := range groupData {
+							strVal := fmt.Sprintf("%v", entry)
+							curPreview.rows = append(curPreview.rows, strVal)
+
+							if len(strVal) > curPreview.maxLength {
+								curPreview.maxLength = len(strVal)
+							}
+						}
+					case FLOAT:
+						groupData := value.([]float64)
+
+						for _, entry := range groupData {
+							strVal := fmt.Sprintf("%v", entry)
+							curPreview.rows = append(curPreview.rows, strVal)
+
+							if len(strVal) > curPreview.maxLength {
+								curPreview.maxLength = len(strVal)
+							}
+						}
+					case STRING:
+						groupData := value.([]string)
+
+						for _, entry := range groupData {
+							strVal := fmt.Sprintf("%v", entry)
+							curPreview.rows = append(curPreview.rows, strVal)
+
+							if len(strVal) > curPreview.maxLength {
+								curPreview.maxLength = len(strVal)
+							}
+						}
+					}
+				} else {
+					var groupedCol *Column
+					for i := 0; i < len(r.Columns); i++ {
+						if r.Columns[i].Signature.Flags&GROUPED != 0 {
+							groupedCol = &r.Columns[i]
+							break
+						}
+					}
+					if groupedCol == nil {
+						value, _ := col.GetRow(rowIndex)
+
+						strVal := fmt.Sprintf("%v", value)
+						curPreview.rows = append(curPreview.rows, strVal)
+
+						if len(strVal) > curPreview.maxLength {
+							curPreview.maxLength = len(strVal)
+						}
+					} else {
+						groupData, _ := groupedCol.GetRow(rowIndex)
+						numRows := 0
+
+						switch groupedCol.Signature.Type {
+						case INT:
+							numRows = len(groupData.([]int))
+						case FLOAT:
+							numRows = len(groupData.([]float64))
+						case STRING:
+							numRows = len(groupData.([]string))
+						}
+
+						value, _ := col.GetRow(rowIndex)
+
+						for i := 0; i < numRows; i++ {
+							if i == numRows/2 {
+								strVal := fmt.Sprintf("%v", value)
+								curPreview.rows = append(curPreview.rows, strVal)
+
+								if len(strVal) > curPreview.maxLength {
+									curPreview.maxLength = len(strVal)
+								}
+							} else {
+								curPreview.rows = append(curPreview.rows, "")
+							}
+						}
+					}
+				}
+
+				if rowIndex < endIndex-1 && rowIndex < col.GetNumRows()-1 {
+					curPreview.lineAfter = append(curPreview.lineAfter, len(curPreview.rows)-1)
+				}
+			}
 		}
 
 		return preview
@@ -240,41 +364,92 @@ func (r Relation) Print() {
 			width = len(r.Name) + 4
 		}
 
-		openingLine := "+" + strings.Repeat("-", width-2) + "+"
+		//openingLine := "+" + strings.Repeat("=", width-2) + "+"
+		openingLine := TopLeftCorner + strings.Repeat(TopOuterBorder, width-2) + TopRightCorner
 		fmt.Println(openingLine)
-		fmt.Println("| " + centerText(r.Name, width-4) + " |")
+		fmt.Println(LeftOuterBorder + " " + centerText(r.Name, width-4) + " " + RightOuterBorder)
 
 		if alone {
 			fmt.Println(openingLine)
 		}
 	}
 
-	generateRowSeparatorLine := func(preview []previewColumn) string {
-		sepLine := "+"
+	generateHeaderLine := func(preview []previewColumn, isBottomLine bool) string {
+		sepLine := ""
 
-		for _, curPreview := range preview {
-			sepLine += strings.Repeat("-", curPreview.maxLength+2) + "+"
+		for prevIndex, curPreview := range preview {
+			if prevIndex == 0 {
+				sepLine += LeftHeaderCross
+			} else if isBottomLine {
+				sepLine += MiddleBorderCross
+			} else {
+				sepLine += TopBorderCross
+			}
+			sepLine += strings.Repeat(TopOuterBorder, curPreview.maxLength+2)
+		}
+		sepLine += RightHeaderCross
+
+		return sepLine
+	}
+
+	generateRowSeparatorLine := func(preview []previewColumn) string {
+		sepLine := ""
+
+		for prevIndex, curPreview := range preview {
+			if prevIndex == 0 {
+				sepLine += LeftBorderCross
+			} else {
+				sepLine += MiddleBorderCross
+			}
+			sepLine += strings.Repeat(HorizontalBorder, curPreview.maxLength+2)
+		}
+		sepLine += RightBorderCross
+
+		return sepLine
+	}
+
+	generateFooterLine := func(preview []previewColumn) string {
+		sepLine := BottomLeftCorner
+
+		for index, curPreview := range preview {
+			sepLine += strings.Repeat(BottomOuterBorder, curPreview.maxLength+2)
+			if index < len(preview)-1 {
+				sepLine += BottomBorderCross
+			} else {
+				sepLine += BottomRightCorner
+			}
 		}
 
 		return sepLine
 	}
 
 	printColumnHeaders := func(preview []previewColumn) {
-		sepLine := generateRowSeparatorLine(preview)
-		fmt.Println(sepLine)
+		fmt.Println(generateHeaderLine(preview, false))
 
-		for _, curPreview := range preview {
-			fmt.Print("| " + centerText(curPreview.name, curPreview.maxLength) + " ")
+		for index, curPreview := range preview {
+			if index == 0 {
+				fmt.Print(LeftOuterBorder + " ")
+			} else {
+				fmt.Print(VerticalBorder + " ")
+			}
+			fmt.Print(centerText(curPreview.name, curPreview.maxLength) + " ")
 		}
-		fmt.Println("|")
+		fmt.Println(RightOuterBorder)
 
-		fmt.Println(sepLine)
+		fmt.Println(generateHeaderLine(preview, true))
 	}
 
 	printRows := func(preview []previewColumn) {
+		linePointer := 0
+		sepLine := generateRowSeparatorLine(preview)
+
 		for index := 0; index < len(preview[0].rows); index++ {
-			for _, curPreview := range preview {
-				fmt.Print("| ")
+			for prevIndex, curPreview := range preview {
+				if prevIndex == 0 {
+					fmt.Print(LeftOuterBorder + " ")
+				} else {
+					fmt.Print(VerticalBorder + " ")
+				}
 				if curPreview.alignLeft {
 					fmt.Print(curPreview.rows[index] + strings.Repeat(" ", curPreview.maxLength-len(curPreview.rows[index])))
 				} else {
@@ -282,16 +457,27 @@ func (r Relation) Print() {
 				}
 				fmt.Print(" ")
 			}
-			fmt.Println("|")
+			fmt.Println(RightOuterBorder)
+
+			if linePointer < len(preview[0].lineAfter) && preview[0].lineAfter[linePointer] == index {
+				fmt.Println(sepLine)
+				linePointer++
+			}
 		}
 	}
 
 	printFooter := func(preview []previewColumn) {
-		fmt.Println(generateRowSeparatorLine(preview))
+		fmt.Println(generateFooterLine(preview))
 		fmt.Println()
 	}
 
-	data := fillPreview(generatePreview(), 0, r.Columns[0].GetNumRows())
+	preview, isGrouped := generatePreview()
+	var data []previewColumn
+	if isGrouped {
+		data = fillGroupedPreview(preview, 0, r.Columns[0].GetNumRows())
+	} else {
+		data = fillPreview(preview, 0, r.Columns[0].GetNumRows())
+	}
 
 	if len(data) <= 0 {
 		printTableName(0, true)
